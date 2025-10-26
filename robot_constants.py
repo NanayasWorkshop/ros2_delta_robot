@@ -41,11 +41,11 @@ MOTOR_MAX_VELOCITY = 0.002  # 2 mm/s = 0.002 m/s
 
 # Maximum motor accelerations (m/s²)
 # Physical acceleration limit
-MOTOR_MAX_ACCELERATION = 0.012  # 12 mm/s² = 0.012 m/s²
+MOTOR_MAX_ACCELERATION = 0.036  # 12 mm/s² = 0.012 m/s²
 
 # Maximum motor jerk (m/s³)
 # Rate of change of acceleration - limits mechanical shock
-MOTOR_MAX_JERK = 0.032  # 32 mm/s³ = 0.032 m/s³
+MOTOR_MAX_JERK = 0.128  # 32 mm/s³ = 0.032 m/s³
 
 # Ruckig synchronization mode
 # 'time': All motors reach target simultaneously (FABRIK solutions hit at same time)

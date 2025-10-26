@@ -4,12 +4,11 @@ import rclpy
 from rclpy.node import Node
 from fabrik_ik_solver.msg import MotorCommand
 from std_msgs.msg import Float64MultiArray, Int32
-import sys
 import numpy as np
 
-# Add robot_constants to path
-sys.path.append('/home/yuuki/ROS2')
-import robot_constants as rc
+from robot_config import physical as phys_config
+from robot_config import motion as motion_config
+from robot_config import system as sys_config
 
 # Import Ruckig
 try:
@@ -23,15 +22,15 @@ class MotorTrajectorySmootherNode(Node):
         super().__init__('motor_trajectory_smoother_node')
 
         # Declare parameters
-        self.declare_parameter('publish_rate', 100.0)  # Hz
+        self.declare_parameter('publish_rate', motion_config.RUCKIG_PUBLISH_RATE)
 
         # Get parameters
         self.publish_rate = self.get_parameter('publish_rate').value
 
         # Initialize Ruckig for 24 motors
-        self.ruckig = Ruckig(rc.NUM_MOTORS, rc.RUCKIG_DELTA_TIME)
-        self.input_param = InputParameter(rc.NUM_MOTORS)
-        self.output_param = OutputParameter(rc.NUM_MOTORS)
+        self.ruckig = Ruckig(phys_config.NUM_MOTORS, motion_config.RUCKIG_DELTA_TIME)
+        self.input_param = InputParameter(phys_config.NUM_MOTORS)
+        self.output_param = OutputParameter(phys_config.NUM_MOTORS)
 
         # Configure Ruckig parameters from robot_constants
         self._configure_ruckig_parameters()
@@ -49,24 +48,24 @@ class MotorTrajectorySmootherNode(Node):
         # Subscriber to motor commands from FABRIK
         self.motor_sub = self.create_subscription(
             MotorCommand,
-            '/motor_commands',
+            sys_config.TOPIC_MOTOR_COMMANDS,
             self.motor_command_callback,
-            10
+            sys_config.QUEUE_SIZE_DEFAULT
         )
 
         # Publisher for smoothed motor commands
         self.smoothed_pub = self.create_publisher(
             MotorCommand,
-            '/smoothed_motor_commands',
-            10
+            sys_config.TOPIC_SMOOTHED_MOTOR_COMMANDS,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
 
         # Publishers for PlotJuggler visualization
-        self.viz_current_pos_pub = self.create_publisher(Float64MultiArray, '/ruckig/current_position', 10)
-        self.viz_current_vel_pub = self.create_publisher(Float64MultiArray, '/ruckig/current_velocity', 10)
-        self.viz_current_acc_pub = self.create_publisher(Float64MultiArray, '/ruckig/current_acceleration', 10)
-        self.viz_target_pos_pub = self.create_publisher(Float64MultiArray, '/ruckig/target_position', 10)
-        self.viz_buffer_size_pub = self.create_publisher(Int32, '/ruckig/buffer_size', 10)
+        self.viz_current_pos_pub = self.create_publisher(Float64MultiArray, sys_config.TOPIC_RUCKIG_CURRENT_POSITION, sys_config.QUEUE_SIZE_DEFAULT)
+        self.viz_current_vel_pub = self.create_publisher(Float64MultiArray, sys_config.TOPIC_RUCKIG_CURRENT_VELOCITY, sys_config.QUEUE_SIZE_DEFAULT)
+        self.viz_current_acc_pub = self.create_publisher(Float64MultiArray, sys_config.TOPIC_RUCKIG_CURRENT_ACCELERATION, sys_config.QUEUE_SIZE_DEFAULT)
+        self.viz_target_pos_pub = self.create_publisher(Float64MultiArray, sys_config.TOPIC_RUCKIG_TARGET_POSITION, sys_config.QUEUE_SIZE_DEFAULT)
+        self.viz_buffer_size_pub = self.create_publisher(Int32, sys_config.TOPIC_RUCKIG_BUFFER_SIZE, sys_config.QUEUE_SIZE_DEFAULT)
 
         # Timer for publishing smooth trajectory at fixed rate
         self.publish_timer = self.create_timer(
@@ -75,34 +74,34 @@ class MotorTrajectorySmootherNode(Node):
         )
 
         self.get_logger().info('Motor Trajectory Smoother started')
-        self.get_logger().info(f'  Motors: {rc.NUM_MOTORS}')
+        self.get_logger().info(f'  Motors: {phys_config.NUM_MOTORS}')
         self.get_logger().info(f'  Publish rate: {self.publish_rate} Hz')
-        self.get_logger().info(f'  Ruckig delta_time: {rc.RUCKIG_DELTA_TIME}s')
-        self.get_logger().info(f'  Max velocity: {rc.MOTOR_MAX_VELOCITY} m/s')
-        self.get_logger().info(f'  Max acceleration: {rc.MOTOR_MAX_ACCELERATION} m/s²')
-        self.get_logger().info(f'  Max jerk: {rc.MOTOR_MAX_JERK} m/s³')
+        self.get_logger().info(f'  Ruckig delta_time: {motion_config.RUCKIG_DELTA_TIME}s')
+        self.get_logger().info(f'  Max velocity: {motion_config.MOTOR_MAX_VELOCITY} m/s')
+        self.get_logger().info(f'  Max acceleration: {motion_config.MOTOR_MAX_ACCELERATION} m/s²')
+        self.get_logger().info(f'  Max jerk: {motion_config.MOTOR_MAX_JERK} m/s³')
 
     def _configure_ruckig_parameters(self):
         """Configure Ruckig input parameters from robot_constants"""
         # Set kinematic limits for all motors (same for all 24) - assign whole list!
-        self.input_param.max_velocity = [rc.MOTOR_MAX_VELOCITY] * rc.NUM_MOTORS
-        self.input_param.max_acceleration = [rc.MOTOR_MAX_ACCELERATION] * rc.NUM_MOTORS
-        self.input_param.max_jerk = [rc.MOTOR_MAX_JERK] * rc.NUM_MOTORS
+        self.input_param.max_velocity = [motion_config.MOTOR_MAX_VELOCITY] * phys_config.NUM_MOTORS
+        self.input_param.max_acceleration = [motion_config.MOTOR_MAX_ACCELERATION] * phys_config.NUM_MOTORS
+        self.input_param.max_jerk = [motion_config.MOTOR_MAX_JERK] * phys_config.NUM_MOTORS
 
         # Set synchronization mode
-        if rc.RUCKIG_SYNCHRONIZATION == 'time':
+        if motion_config.RUCKIG_SYNCHRONIZATION == 'time':
             self.input_param.synchronization = Synchronization.Time
-        elif rc.RUCKIG_SYNCHRONIZATION == 'phase':
+        elif motion_config.RUCKIG_SYNCHRONIZATION == 'phase':
             self.input_param.synchronization = Synchronization.Phase
-        elif rc.RUCKIG_SYNCHRONIZATION == 'none':
+        elif motion_config.RUCKIG_SYNCHRONIZATION == 'none':
             self.input_param.synchronization = Synchronization.No
         else:
             self.input_param.synchronization = Synchronization.Time
 
         # Set control interface
-        if rc.RUCKIG_CONTROL_INTERFACE == 'position':
+        if motion_config.RUCKIG_CONTROL_INTERFACE == 'position':
             self.input_param.control_interface = ControlInterface.Position
-        elif rc.RUCKIG_CONTROL_INTERFACE == 'velocity':
+        elif motion_config.RUCKIG_CONTROL_INTERFACE == 'velocity':
             self.input_param.control_interface = ControlInterface.Velocity
         else:
             self.input_param.control_interface = ControlInterface.Position
@@ -130,8 +129,8 @@ class MotorTrajectorySmootherNode(Node):
             first_waypoint = self.waypoint_buffer[0]
             # Initialize current state - assign whole lists!
             self.input_param.current_position = list(first_waypoint.motor_positions)
-            self.input_param.current_velocity = [0.0] * rc.NUM_MOTORS
-            self.input_param.current_acceleration = [0.0] * rc.NUM_MOTORS
+            self.input_param.current_velocity = [motion_config.RUCKIG_INITIAL_VELOCITY] * phys_config.NUM_MOTORS
+            self.input_param.current_acceleration = [motion_config.RUCKIG_INITIAL_ACCELERATION] * phys_config.NUM_MOTORS
             self.ruckig_initialized = True
             self.waypoint_buffer.pop(0)  # Remove initialization waypoint
             self.get_logger().info(f'Ruckig initialized at position: [{self.input_param.current_position[0]:.6f}, {self.input_param.current_position[1]:.6f}, {self.input_param.current_position[2]:.6f}]')
@@ -146,8 +145,8 @@ class MotorTrajectorySmootherNode(Node):
         self.input_param.target_position = list(target_waypoint.motor_positions)
 
         # Set intermediate positions (look-ahead for smooth trajectory planning)
-        # Limit to next 5-10 waypoints to avoid excessive computation
-        max_lookahead = min(10, len(self.waypoint_buffer) - 1)
+        # Limit to next waypoints to avoid excessive computation
+        max_lookahead = min(motion_config.RUCKIG_MAX_LOOKAHEAD_WAYPOINTS, len(self.waypoint_buffer) - 1)
         self.input_param.intermediate_positions = []
         for i in range(1, max_lookahead + 1):
             if i < len(self.waypoint_buffer):
@@ -157,14 +156,14 @@ class MotorTrajectorySmootherNode(Node):
 
         # Set target velocity: stop only at final waypoint
         if is_final_waypoint:
-            target_vel = rc.RUCKIG_FINAL_TARGET_VELOCITY
+            target_vel = motion_config.RUCKIG_FINAL_TARGET_VELOCITY
         else:
             # Let Ruckig decide velocity for smooth fly-through
             target_vel = 0.0  # Ruckig will optimize velocity for smooth trajectory
 
         # Assign target velocity and acceleration - whole lists!
-        self.input_param.target_velocity = [target_vel] * rc.NUM_MOTORS
-        self.input_param.target_acceleration = [rc.RUCKIG_TARGET_ACCELERATION] * rc.NUM_MOTORS
+        self.input_param.target_velocity = [target_vel] * phys_config.NUM_MOTORS
+        self.input_param.target_acceleration = [motion_config.RUCKIG_TARGET_ACCELERATION] * phys_config.NUM_MOTORS
 
         # Update Ruckig trajectory
         result = self.ruckig.update(self.input_param, self.output_param)
