@@ -1,7 +1,7 @@
 # ROS2 Delta Robot IK System - Architecture
 
 ## Overview
-Complete system for delta robot inverse kinematics: Interactive markers in RViz generate target positions, trajectory tracker records movements, and FABRIK IK solver computes motor commands for an 8-segment delta robot.
+Complete system for delta robot inverse kinematics with real-time URDF visualization: Interactive markers in RViz generate target positions, trajectory tracker records movements, FABRIK IK solver computes motor commands, Ruckig smoother applies jerk-limited motion planning, and the motor-to-joint converter drives the URDF robot model visualization for an 8-segment delta robot.
 
 ## System Flow
 
@@ -40,9 +40,23 @@ graph TB
         RUCKIG_VIZ[Ruckig State Viz]
     end
 
+    subgraph Converter["Motor to Joint Converter (motor_to_joint_converter)"]
+        CONV_SUB[Smoothed Commands Subscriber]
+        FERMAT[Fermat Point Calculation]
+        NORMAL[Plane Normal Computation]
+        JOINT_PUB[Joint State Publisher]
+    end
+
+    subgraph URDF["URDF Visualization (delta_robot_description)"]
+        RSP[robot_state_publisher]
+        STATIC_TF[Static TF: world→base_link]
+        ROBOT_MODEL[8-Segment Robot Model]
+    end
+
     subgraph Output["Output"]
         RVIZ[RViz Visualization]
         SMOOTH_CMD[Smoothed Motor Commands<br/>24 motors<br/>Jerk-limited trajectory]
+        JOINT_STATES[Joint States<br/>24 joint angles<br/>Real-time URDF]
     end
 
     USER -->|Drag target/direction| IM
@@ -63,17 +77,29 @@ graph TB
     RUCKIG -->|100Hz smooth trajectory| SMOOTH_PUB
     RUCKIG --> RUCKIG_VIZ
     SMOOTH_PUB --> SMOOTH_CMD
+    SMOOTH_PUB -->|/smoothed_motor_commands| CONV_SUB
+    CONV_SUB -->|Extract 3 motors per segment| FERMAT
+    FERMAT -->|Calculate Fermat point Z| NORMAL
+    NORMAL -->|Compute plane normal| JOINT_PUB
+    JOINT_PUB -->|/joint_states| RSP
+    STATIC_TF -->|world→base_link| RSP
+    RSP -->|Publish TF tree| ROBOT_MODEL
+    ROBOT_MODEL --> JOINT_STATES
     VIZ_PUB -->|MarkerArray| RVIZ
     FABRIK_VIZ -->|/fabrik/motor_positions| RVIZ
     RUCKIG_VIZ -->|/ruckig/current_*| RVIZ
     TFPUB -->|TF frames| RVIZ
+    ROBOT_MODEL -->|Robot visual| RVIZ
     CLEAR_PUB -->|/clear_oldest Int32| BUFFER
 
     style SOLVER fill:#e1f5ff
     style RUCKIG fill:#ffe1f5
+    style FERMAT fill:#fff4e1
+    style NORMAL fill:#fff4e1
     style BUFFER fill:#fff4e1
     style WP_BUFFER fill:#fff4e1
     style SMOOTH_CMD fill:#e8f5e9
+    style JOINT_STATES fill:#e8f5e9
 ```
 
 ## Packages
@@ -190,6 +216,79 @@ Applies jerk-limited motion planning to raw motor commands using Ruckig library.
 - Jerk limits ensure smooth acceleration changes (no sudden jerks)
 - 100Hz update rate matches robot control frequency
 
+### motor_to_joint_converter
+Converts motor Z positions to joint angles for URDF visualization. Each segment has 3 motors (A, B, C) arranged in a delta configuration that control 2 revolute joints (roll, pitch) and 1 prismatic joint (extension).
+
+**Node:**
+- `motor_to_joint_converter_node`: Converts 24 motor positions → 24 joint angles
+
+**Launch Files:**
+- `motor_to_joint_converter.launch.py` - converter node only
+
+**Topics:**
+- Input: `/smoothed_motor_commands` - smoothed motor positions from Ruckig
+- Output: `/joint_states` - joint angles for robot_state_publisher
+
+**Conversion Algorithm (per segment):**
+1. **Base Positions** (fixed in XY plane, Z=0):
+   - Motor A: 90° (0, r)
+   - Motor B: 330° (-30°) - matches IK solver
+   - Motor C: 210° (-150°) - matches IK solver
+
+2. **Plane Normal Calculation**:
+   - Create 3D points from motor Z positions: A(x_A, y_A, z_A), B, C
+   - Calculate vectors: AB = B - A, AC = C - A
+   - Normal = (AC × AB) normalized (upward-pointing)
+
+3. **Roll & Pitch from Normal**:
+   - roll = -atan2(n_y, n_z)
+   - pitch = atan2(n_x, n_z)
+
+4. **Prismatic Extension (Fermat Point)**:
+   - Calculate Fermat point (geometric center) of triangle ABC
+   - prismatic = 2.0 × fermat_z
+
+**Key Implementation Details:**
+- Base positions must match IK solver exactly (A:90°, B:330°, C:210°)
+- Cross product order matters: (AC × AB) gives correct upward normal
+- Fermat point calculation uses weighted centroid with angle-based weights
+- Each segment processed independently (3 motors → 3 joints)
+
+### delta_robot_description
+URDF model and visualization for the 8-segment modular delta robot.
+
+**Nodes:**
+- `robot_state_publisher`: Publishes robot TF tree from URDF + joint states
+- `static_transform_publisher`: Publishes world→base_link transform
+
+**Launch Files:**
+- `display.launch.py` - robot state publisher + static TF
+
+**Files:**
+- `urdf/modular_robot.xacro` - 8-segment robot description
+- `meshes/base.stl` - segment base plate
+- `meshes/base_top.stl` - top platform
+- `meshes/middle.stl` - middle platform
+
+**URDF Structure (per segment):**
+- `segN_base_link` - fixed to previous segment
+- `segN_joint1` - revolute X (roll)
+- `segN_joint2` - revolute Y (pitch)
+- `segN_joint3` - prismatic Z (extension)
+- `segN_joint4-6` - mimic joints (mirror joint1-3)
+- `segN_end_link` - segment tip
+
+**Topics:**
+- Input: `/joint_states` - joint angles from motor_to_joint_converter
+- Output: `/robot_description` - URDF string
+- Output: TF tree for all robot links
+
+**Key Implementation Details:**
+- Static TF publishes world→base_link at origin
+- robot_state_publisher reads /joint_states and publishes full TF tree
+- Mimic joints (4-6) mirror revolute joints (1-3) for visual symmetry
+- Each segment has independent 3-DOF motion (2 revolute + 1 prismatic)
+
 ## Markers
 
 | Name | Color | Size | Initial Position | TF Frame |
@@ -201,9 +300,22 @@ Applies jerk-limited motion planning to raw motor commands using Ruckig library.
 
 ```
 map (static)
- └─ world
+ └─ world (static)
      ├─ target (dynamic, 10Hz)
-     └─ direction (dynamic, 10Hz)
+     ├─ direction (dynamic, 10Hz)
+     └─ base_link (static)
+         └─ seg1_base_link
+             ├─ seg1_link1 (revolute X - roll)
+             │   └─ seg1_link2 (revolute Y - pitch)
+             │       └─ seg1_link3 (prismatic Z - extension)
+             │           └─ seg1_middle_link
+             │               ├─ seg1_link4 (mimic joint1)
+             │               ├─ seg1_link5 (mimic joint2)
+             │               └─ seg1_link6 (mimic joint3)
+             │                   └─ seg1_end_link
+             │                       └─ seg2_base_link
+             │                           └─ ... (repeat for seg2-8)
+             └─ ... (all segments follow same pattern)
 ```
 
 ## Key Implementation Details
@@ -242,8 +354,9 @@ map (static)
 **Workspace-level config** (for complete system):
 - `/home/yuuki/ROS2/rviz/main.rviz` - combines all visualizations
 - Used by main.launch.py for the complete system
+- Includes: Interactive markers, FABRIK visualization, Ruckig state, and Robot Model
 
-This separation keeps package configs minimal and focused, while the main config includes all system visualizations (markers, FABRIK J/S points, trajectory, etc.).
+This separation keeps package configs minimal and focused, while the main config includes all system visualizations (markers, FABRIK J/S points, trajectory, robot model, etc.).
 
 ## Launch
 
@@ -258,6 +371,8 @@ ros2 launch interactive_tf_markers interactive_markers_with_rviz.launch.py
 ros2 launch trajectory_tracker trajectory_tracker.launch.py
 ros2 launch fabrik_ik_solver fabrik_ik_solver.launch.py
 ros2 launch motor_trajectory_smoother motor_trajectory_smoother.launch.py
+ros2 launch motor_to_joint_converter motor_to_joint_converter.launch.py
+ros2 launch delta_robot_description display.launch.py
 ```
 
 ## Build
@@ -300,4 +415,8 @@ ros2 topic echo /ruckig/current_position      # Smoothed position
 ros2 topic echo /ruckig/current_velocity      # Current velocity
 ros2 topic echo /ruckig/current_acceleration  # Current acceleration
 ros2 topic echo /ruckig/buffer_size           # Waypoint buffer size
+
+# Monitor URDF visualization
+ros2 topic echo /joint_states                 # Joint angles for robot model
+ros2 run tf2_tools view_frames                # Generate TF tree PDF
 ```
