@@ -7,23 +7,17 @@ Supports cold start (straight line) and hot start (from robot state).
 """
 
 import numpy as np
-import sys
-import os
-from ament_index_python.packages import get_package_share_directory
 
-# Import config from delta_robot_description installed package
-config_path = os.path.join(get_package_share_directory('delta_robot_description'), 'config')
-sys.path.insert(0, config_path)
-from robot_constants import BASE_HEIGHT, SEGMENT_OFFSET, NUM_SEGMENTS
+from robot_config import physical as phys_config
 
 
 class FabrikInitialization:
     """Initialization of FABRIK solver with S-points and J-points."""
 
-    SEGMENT_SPACING = 2 * SEGMENT_OFFSET + 2 * BASE_HEIGHT  # 146mm
+    SEGMENT_SPACING = 2 * phys_config.SEGMENT_OFFSET + 2 * phys_config.BASE_HEIGHT  # 146mm
 
     @staticmethod
-    def create_straight_chain_s_points(num_segments: int = NUM_SEGMENTS) -> np.ndarray:
+    def create_straight_chain_s_points(num_segments: int = phys_config.NUM_SEGMENTS) -> np.ndarray:
         """
         Create S-points in straight vertical line (cold start).
 
@@ -141,7 +135,7 @@ class FabrikInitialization:
         return FabrikInitialization.SEGMENT_SPACING
 
     @staticmethod
-    def cold_start(num_segments: int = NUM_SEGMENTS) -> tuple:
+    def cold_start(num_segments: int = phys_config.NUM_SEGMENTS) -> tuple:
         """
         Initialize FABRIK with cold start (straight vertical chain).
 

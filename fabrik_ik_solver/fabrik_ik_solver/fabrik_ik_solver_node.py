@@ -9,14 +9,14 @@ from geometry_msgs.msg import Point
 from visualization_msgs.msg import Marker, MarkerArray
 from trajectory_tracker.msg import Trajectory
 from fabrik_ik_solver.msg import MotorCommand, FabrikVisualization
-import sys
 import numpy as np
 import threading
 
-# Add fabrik module to path (fabrik/ is in package, robot_constants.py is in workspace root)
-sys.path.append('/home/yuuki/ROS2/fabrik_ik_solver')
-sys.path.append('/home/yuuki/ROS2')
 from fabrik import FabrikSolver
+from robot_config import physical as phys_config
+from robot_config import motion as motion_config
+from robot_config import visualization as viz_config
+from robot_config import system as sys_config
 
 
 class FabrikIKSolverNode(Node):
@@ -24,9 +24,9 @@ class FabrikIKSolverNode(Node):
         super().__init__('fabrik_ik_solver_node')
 
         # Declare parameters
-        self.declare_parameter('num_segments', 8)
-        self.declare_parameter('tolerance', 0.001)  # 1mm
-        self.declare_parameter('max_iterations', 50)
+        self.declare_parameter('num_segments', phys_config.NUM_SEGMENTS)
+        self.declare_parameter('tolerance', motion_config.FABRIK_TOLERANCE)
+        self.declare_parameter('max_iterations', motion_config.FABRIK_MAX_ITERATIONS)
         self.declare_parameter('enable_visualization', True)
         self.declare_parameter('use_hot_start', True)
 
@@ -62,39 +62,39 @@ class FabrikIKSolverNode(Node):
         # Subscribers with callback group
         self.trajectory_sub = self.create_subscription(
             Trajectory,
-            '/trajectory',
+            sys_config.TOPIC_TRAJECTORY,
             self.trajectory_callback,
-            10,
+            sys_config.QUEUE_SIZE_DEFAULT,
             callback_group=self.callback_group
         )
 
         # Publishers
         self.motor_pub = self.create_publisher(
             MotorCommand,
-            '/motor_commands',
-            10
+            sys_config.TOPIC_MOTOR_COMMANDS,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
         self.viz_pub = self.create_publisher(
             FabrikVisualization,
-            '/fabrik_visualization',
-            10
+            sys_config.TOPIC_FABRIK_VISUALIZATION,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
         self.marker_pub = self.create_publisher(
             MarkerArray,
-            '/fabrik_markers',
-            10
+            sys_config.TOPIC_FABRIK_MARKERS,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
         self.clear_oldest_pub = self.create_publisher(
             Int32,
-            '/clear_oldest',
-            10
+            sys_config.TOPIC_CLEAR_OLDEST,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
         # Publisher for motor positions visualization (PlotJuggler)
         from std_msgs.msg import Float64MultiArray
         self.fabrik_motor_pos_pub = self.create_publisher(
             Float64MultiArray,
-            '/fabrik/motor_positions',
-            10
+            sys_config.TOPIC_FABRIK_MOTOR_POSITIONS,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
 
         self.get_logger().info(f'FABRIK IK Solver started')
@@ -125,9 +125,9 @@ class FabrikIKSolverNode(Node):
 
             # Look for target and direction frames in the trajectory
             for point in msg.points:
-                if point.frame_name == 'target':
+                if point.frame_name == sys_config.FRAME_TARGET:
                     target_point = point
-                elif point.frame_name == 'direction':
+                elif point.frame_name == sys_config.FRAME_DIRECTION:
                     approach_point = point
 
             # Only process if we have a target
@@ -154,7 +154,7 @@ class FabrikIKSolverNode(Node):
             # Check if approach point changed - add tiny offset to invalidate hot start convergence
             approach_changed = False
             if self.last_approach_point is not None and approach is not None:
-                approach_changed = np.linalg.norm(approach - self.last_approach_point) > 1e-6
+                approach_changed = np.linalg.norm(approach - self.last_approach_point) > motion_config.FABRIK_APPROACH_CHANGE_THRESHOLD
                 if approach_changed:
                     # Add 0.1mm offset to target to force FABRIK to iterate
                     # This ensures approach constraint is applied even when target hasn't moved
@@ -271,10 +271,10 @@ class FabrikIKSolverNode(Node):
         """Publish visualization markers for RViz"""
         marker_array = MarkerArray()
 
-        # S-points as blue spheres (double size: 30mm)
+        # S-points as blue spheres
         for i, s_point in enumerate(s_points):
             marker = Marker()
-            marker.header.frame_id = 'world'
+            marker.header.frame_id = sys_config.FRAME_WORLD
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = 's_points'
             marker.id = i
@@ -284,19 +284,19 @@ class FabrikIKSolverNode(Node):
             marker.pose.position.y = float(s_point[1])
             marker.pose.position.z = float(s_point[2])
             marker.pose.orientation.w = 1.0
-            marker.scale.x = 0.030  # 30mm (doubled)
-            marker.scale.y = 0.030
-            marker.scale.z = 0.030
+            marker.scale.x = viz_config.FABRIK_S_POINT_SIZE
+            marker.scale.y = viz_config.FABRIK_S_POINT_SIZE
+            marker.scale.z = viz_config.FABRIK_S_POINT_SIZE
             marker.color.r = 0.0
             marker.color.g = 0.0
             marker.color.b = 1.0  # Blue
             marker.color.a = 0.8
             marker_array.markers.append(marker)
 
-        # J-points as green spheres (double size: 30mm)
+        # J-points as green spheres
         for i, j_point in enumerate(j_points):
             marker = Marker()
-            marker.header.frame_id = 'world'
+            marker.header.frame_id = sys_config.FRAME_WORLD
             marker.header.stamp = self.get_clock().now().to_msg()
             marker.ns = 'j_points'
             marker.id = i
@@ -306,9 +306,9 @@ class FabrikIKSolverNode(Node):
             marker.pose.position.y = float(j_point[1])
             marker.pose.position.z = float(j_point[2])
             marker.pose.orientation.w = 1.0
-            marker.scale.x = 0.030  # 30mm (doubled)
-            marker.scale.y = 0.030
-            marker.scale.z = 0.030
+            marker.scale.x = viz_config.FABRIK_J_POINT_SIZE
+            marker.scale.y = viz_config.FABRIK_J_POINT_SIZE
+            marker.scale.z = viz_config.FABRIK_J_POINT_SIZE
             marker.color.r = 0.0
             marker.color.g = 1.0  # Green
             marker.color.b = 0.0
@@ -317,7 +317,7 @@ class FabrikIKSolverNode(Node):
 
         # Line strip connecting S-points (blue)
         s_line_marker = Marker()
-        s_line_marker.header.frame_id = 'world'
+        s_line_marker.header.frame_id = sys_config.FRAME_WORLD
         s_line_marker.header.stamp = self.get_clock().now().to_msg()
         s_line_marker.ns = 's_chain'
         s_line_marker.id = 0
@@ -340,7 +340,7 @@ class FabrikIKSolverNode(Node):
 
         # Line strip connecting J-points (green)
         j_line_marker = Marker()
-        j_line_marker.header.frame_id = 'world'
+        j_line_marker.header.frame_id = sys_config.FRAME_WORLD
         j_line_marker.header.stamp = self.get_clock().now().to_msg()
         j_line_marker.ns = 'j_chain'
         j_line_marker.id = 0

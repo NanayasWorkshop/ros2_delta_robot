@@ -69,6 +69,9 @@ FABRIK_ENABLE_VISUALIZATION = True
 FABRIK_USE_HOT_START = True
 """Use previous solution as starting point for next iteration"""
 
+FABRIK_CONE_HALF_ANGLE = 1.0472  # 60° in radians (2 × 30° REVOLUTE_LIMIT)
+"""Cone constraint half angle for FABRIK solver (derived from REVOLUTE_LIMIT)"""
+
 # =============================================================================
 # MOTOR TO JOINT CONVERSION
 # =============================================================================

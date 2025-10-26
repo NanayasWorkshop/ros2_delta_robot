@@ -35,6 +35,12 @@ install(DIRECTORY fabrik_ik_solver/
   FILES_MATCHING PATTERN "*.py"
 )
 
+# Install fabrik module
+install(DIRECTORY fabrik/
+  DESTINATION lib/python3.10/site-packages/fabrik
+  FILES_MATCHING PATTERN "*.py"
+)
+
 # Install launch files
 install(DIRECTORY launch/
   DESTINATION share/${PROJECT_NAME}/launch

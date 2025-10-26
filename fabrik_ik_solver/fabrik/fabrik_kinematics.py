@@ -12,26 +12,14 @@ import numpy as np
 from typing import List, Dict
 import math
 import warnings
-import sys
-import os
-from ament_index_python.packages import get_package_share_directory
 
-# Import config from delta_robot_description installed package
-config_path = os.path.join(get_package_share_directory('delta_robot_description'), 'config')
-sys.path.insert(0, config_path)
-from robot_constants import (
-    ACTUATOR_RADIUS,
-    BASE_HEIGHT,
-    SEGMENT_OFFSET,
-    PRISMATIC_RANGE,
-    REVOLUTE_LIMIT
-)
+from robot_config import physical as phys_config
 
 # Convert to mm for internal calculations
-ROBOT_RADIUS = ACTUATOR_RADIUS * 1000
-WORKING_HEIGHT = BASE_HEIGHT * 1000
-MOTOR_LIMIT = PRISMATIC_RANGE * 1000
-SEGMENT_HEIGHT = SEGMENT_OFFSET * 1000
+ROBOT_RADIUS = phys_config.ACTUATOR_RADIUS * 1000
+WORKING_HEIGHT = phys_config.BASE_HEIGHT * 1000
+MOTOR_LIMIT = phys_config.PRISMATIC_RANGE * 1000
+SEGMENT_HEIGHT = phys_config.SEGMENT_OFFSET * 1000
 
 # Motor base angles
 BASE_A_ANGLE = math.pi / 2.0

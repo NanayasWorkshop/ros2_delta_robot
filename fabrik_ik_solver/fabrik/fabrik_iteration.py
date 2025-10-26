@@ -6,24 +6,18 @@ Implements backward and forward passes for FABRIK IK solver.
 """
 
 import numpy as np
-import sys
-import os
-from ament_index_python.packages import get_package_share_directory
+
 from .fabrik_constraints import FabrikConeConstraint
 from .fabrik_kinematics import calculate_kinematics
-
-# Import config from delta_robot_description installed package
-config_path = os.path.join(get_package_share_directory('delta_robot_description'), 'config')
-sys.path.insert(0, config_path)
-from robot_constants import FABRIK_CONE_HALF_ANGLE
+from robot_config import motion as motion_config
 
 
 class FabrikIteration:
     """FABRIK iteration with backward and forward passes."""
 
     # Default cone constraint settings (derived from REVOLUTE_LIMIT)
-    FULL_CONE_HALF_ANGLE_RAD = FABRIK_CONE_HALF_ANGLE  # 2×30° = 60° (full constraint)
-    INITIAL_CONE_HALF_ANGLE_RAD = FABRIK_CONE_HALF_ANGLE / 2.0  # 30° (half of full, tight start)
+    FULL_CONE_HALF_ANGLE_RAD = motion_config.FABRIK_CONE_HALF_ANGLE  # 2×30° = 60° (full constraint)
+    INITIAL_CONE_HALF_ANGLE_RAD = motion_config.FABRIK_CONE_HALF_ANGLE / 2.0  # 30° (half of full, tight start)
     RELAXATION_ITERATIONS = 20  # Iterations to reach full cone
 
     @staticmethod
@@ -314,9 +308,9 @@ class FabrikIteration:
 
         # Step 3: Create temporary straight vertical S-points (in mm)
         # segment_lengths contains prismatic_joint offsets, add to nominal TOTAL_SEGMENT_HEIGHT
-        from robot_constants import TOTAL_SEGMENT_HEIGHT
+        from robot_config import physical as phys_config
 
-        NOMINAL_SEGMENT_HEIGHT_MM = TOTAL_SEGMENT_HEIGHT * 1000  # 146mm
+        NOMINAL_SEGMENT_HEIGHT_MM = phys_config.TOTAL_SEGMENT_HEIGHT * 1000  # 146mm
 
         temp_s_points = np.zeros((num_segments + 1, 3), dtype=np.float64)
         temp_s_points[0] = np.array([0.0, 0.0, 0.0])  # S0 at origin

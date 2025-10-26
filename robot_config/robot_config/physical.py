@@ -48,8 +48,8 @@ MOTOR_C_ANGLE = -5.0 * math.pi / 6.0
 REVOLUTE_LIMIT_DEG = math.degrees(REVOLUTE_LIMIT)
 """Revolute limit in degrees (30°)"""
 
-TOTAL_SEGMENT_HEIGHT = BASE_HEIGHT + SEGMENT_OFFSET * 2 + BASE_HEIGHT
-"""Approximate segment height (~146mm nominal)"""
+TOTAL_SEGMENT_HEIGHT = BASE_HEIGHT + SEGMENT_OFFSET * 2 + BASE_HEIGHT  # ~146mm nominal
+"""Total height of one segment including base heights and offsets"""
 
 FABRIK_CONE_HALF_ANGLE = REVOLUTE_LIMIT * 2
 """FABRIK cone constraint: 60° half-angle (2 × 30°)"""

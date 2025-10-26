@@ -7,22 +7,16 @@ Prevents unrealistic bending between segments.
 """
 
 import numpy as np
-import sys
-import os
-from ament_index_python.packages import get_package_share_directory
 
-# Import config from delta_robot_description installed package
-config_path = os.path.join(get_package_share_directory('delta_robot_description'), 'config')
-sys.path.insert(0, config_path)
-from robot_constants import FABRIK_CONE_HALF_ANGLE
+from robot_config import motion as motion_config
 
 
 class FabrikConeConstraint:
     """Cone constraint for FABRIK solver."""
 
     # 120° full cone angle = 60° half angle (derived from REVOLUTE_LIMIT)
-    CONE_HALF_ANGLE_RAD = FABRIK_CONE_HALF_ANGLE  # 2×30° = 60° in radians
-    CONE_HALF_ANGLE_DEG = np.degrees(FABRIK_CONE_HALF_ANGLE)
+    CONE_HALF_ANGLE_RAD = motion_config.FABRIK_CONE_HALF_ANGLE  # 2×30° = 60° in radians
+    CONE_HALF_ANGLE_DEG = np.degrees(motion_config.FABRIK_CONE_HALF_ANGLE)
 
     @staticmethod
     def project_onto_cone(direction: np.ndarray,
