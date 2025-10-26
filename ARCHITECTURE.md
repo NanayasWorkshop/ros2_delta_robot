@@ -26,14 +26,23 @@ graph TB
     subgraph FABRIK["FABRIK IK Solver (fabrik_ik_solver)"]
         IK_SUB[Trajectory Subscriber]
         SOLVER[FABRIK Algorithm<br/>Hot Start enabled]
-        MOTORS_PUB[Motor Commands Publisher]
+        RAW_MOTORS_PUB[Raw Motor Commands Publisher]
         VIZ_PUB[Visualization Publisher]
         CLEAR_PUB[Clear Oldest Publisher]
+        FABRIK_VIZ[Motor Position Viz]
+    end
+
+    subgraph Smoother["Motor Trajectory Smoother (motor_trajectory_smoother)"]
+        SMOOTH_SUB[Motor Commands Subscriber]
+        WP_BUFFER[Waypoint Buffer]
+        RUCKIG[Ruckig Library<br/>100Hz, Jerk-limited<br/>Look-ahead: 10 waypoints]
+        SMOOTH_PUB[Smoothed Commands Publisher]
+        RUCKIG_VIZ[Ruckig State Viz]
     end
 
     subgraph Output["Output"]
         RVIZ[RViz Visualization]
-        MOTOR_CMD[Motor Commands<br/>24 motors]
+        SMOOTH_CMD[Smoothed Motor Commands<br/>24 motors<br/>Jerk-limited trajectory]
     end
 
     USER -->|Drag target/direction| IM
@@ -44,17 +53,27 @@ graph TB
     BUFFER -->|/trajectory| TRAJ_PUB
     TRAJ_PUB --> IK_SUB
     IK_SUB -->|Process oldest point| SOLVER
-    SOLVER -->|24 motor positions| MOTORS_PUB
+    SOLVER -->|24 motor positions| RAW_MOTORS_PUB
     SOLVER -->|S-points, J-points| VIZ_PUB
     SOLVER -->|Delete processed| CLEAR_PUB
-    MOTORS_PUB --> MOTOR_CMD
+    RAW_MOTORS_PUB -->|/motor_commands| SMOOTH_SUB
+    RAW_MOTORS_PUB --> FABRIK_VIZ
+    SMOOTH_SUB --> WP_BUFFER
+    WP_BUFFER -->|Feed to Ruckig| RUCKIG
+    RUCKIG -->|100Hz smooth trajectory| SMOOTH_PUB
+    RUCKIG --> RUCKIG_VIZ
+    SMOOTH_PUB --> SMOOTH_CMD
     VIZ_PUB -->|MarkerArray| RVIZ
+    FABRIK_VIZ -->|/fabrik/motor_positions| RVIZ
+    RUCKIG_VIZ -->|/ruckig/current_*| RVIZ
     TFPUB -->|TF frames| RVIZ
     CLEAR_PUB -->|/clear_oldest Int32| BUFFER
 
     style SOLVER fill:#e1f5ff
+    style RUCKIG fill:#ffe1f5
     style BUFFER fill:#fff4e1
-    style MOTOR_CMD fill:#e8f5e9
+    style WP_BUFFER fill:#fff4e1
+    style SMOOTH_CMD fill:#e8f5e9
 ```
 
 ## Packages
@@ -130,6 +149,47 @@ FABRIK IK solver for 8-segment delta robot. Processes trajectory points sequenti
 - S-points: Blue spheres (30mm) + blue chain line
 - J-points: Green spheres (30mm) + green chain line
 
+### motor_trajectory_smoother
+Applies jerk-limited motion planning to raw motor commands using Ruckig library. Ensures smooth, physically-realizable trajectories with controlled acceleration changes.
+
+**Node:**
+- `motor_trajectory_smoother_node`: Smooths motor trajectories at 100Hz using Ruckig
+
+**Launch Files:**
+- `motor_trajectory_smoother.launch.py` - trajectory smoother only
+
+**Topics:**
+- Input: `/motor_commands` - raw motor positions from FABRIK
+- Output: `/smoothed_motor_commands` - jerk-limited smooth trajectories
+- Visualization:
+  - `/fabrik/motor_positions` - raw FABRIK motor output
+  - `/ruckig/current_position` - current smoothed position
+  - `/ruckig/current_velocity` - current velocity
+  - `/ruckig/current_acceleration` - current acceleration
+  - `/ruckig/target_position` - target position
+  - `/ruckig/buffer_size` - waypoint buffer size
+
+**Parameters:**
+- `publish_rate` - trajectory update rate in Hz (default: 100.0)
+- Motion limits (from robot_constants.py):
+  - `MOTOR_MAX_VELOCITY` - 2 mm/s
+  - `MOTOR_MAX_ACCELERATION` - 12 mm/s²
+  - `MOTOR_MAX_JERK` - 32 mm/s³
+  - `RUCKIG_DELTA_TIME` - 0.01s (100Hz)
+
+**Ruckig Configuration:**
+- **Look-ahead**: Uses `intermediate_positions` to see up to 10 waypoints ahead
+- **Synchronization**: Time-synchronized (all motors arrive together)
+- **Control Interface**: Position control (full kinematic state control)
+- **List Assignment**: All Ruckig parameters use whole-list assignment (Python bindings requirement)
+
+**Key Implementation Details:**
+- Waypoint buffer queues incoming motor commands
+- Ruckig plans smooth trajectories through buffered waypoints
+- Look-ahead prevents overshooting on dense waypoint sequences
+- Jerk limits ensure smooth acceleration changes (no sudden jerks)
+- 100Hz update rate matches robot control frequency
+
 ## Markers
 
 | Name | Color | Size | Initial Position | TF Frame |
@@ -197,6 +257,7 @@ ros2 launch main.launch.py
 ros2 launch interactive_tf_markers interactive_markers_with_rviz.launch.py
 ros2 launch trajectory_tracker trajectory_tracker.launch.py
 ros2 launch fabrik_ik_solver fabrik_ik_solver.launch.py
+ros2 launch motor_trajectory_smoother motor_trajectory_smoother.launch.py
 ```
 
 ## Build
@@ -229,6 +290,14 @@ ros2 topic pub /clear_trajectory std_msgs/Empty "{}"
 ros2 topic pub /clear_oldest std_msgs/Int32 "data: 10"
 
 # Monitor motor commands
-ros2 topic echo /motor_commands
+ros2 topic echo /motor_commands              # Raw FABRIK output
+ros2 topic echo /smoothed_motor_commands      # Smoothed Ruckig output
 ros2 topic echo /fabrik_visualization
+
+# Monitor Ruckig smoothing (for PlotJuggler)
+ros2 topic echo /fabrik/motor_positions       # Raw motor positions
+ros2 topic echo /ruckig/current_position      # Smoothed position
+ros2 topic echo /ruckig/current_velocity      # Current velocity
+ros2 topic echo /ruckig/current_acceleration  # Current acceleration
+ros2 topic echo /ruckig/buffer_size           # Waypoint buffer size
 ```
