@@ -1,7 +1,7 @@
-# ROS2 Interactive Markers & Trajectory Tracker - Architecture
+# ROS2 Delta Robot IK System - Architecture
 
 ## Overview
-Interactive markers in RViz broadcast TF transforms. Trajectory tracker samples and records marker positions only when they change.
+Complete system for delta robot inverse kinematics: Interactive markers in RViz generate target positions, trajectory tracker records movements, and FABRIK IK solver computes motor commands for an 8-segment delta robot.
 
 ## System Flow
 
@@ -12,7 +12,10 @@ graph LR
     IM -->|10Hz Timer| TF[TF Broadcaster]
     TF --> TRACKER[trajectory_tracker]
     TF --> RVIZ
-    TRACKER -->|5Hz Sample| TOPIC[trajectory topic]
+    TRACKER -->|trajectory topic| FABRIK[fabrik_ik_solver]
+    FABRIK -->|motor_commands| MOTORS[Motor Commands]
+    FABRIK -->|fabrik_markers| RVIZ
+    FABRIK -->|clear_oldest| TRACKER
 ```
 
 ## Packages
@@ -48,6 +51,46 @@ Records TF positions at 5Hz, only when positions change.
 - `/clear_trajectory` - clear all points (Empty)
 - `/clear_oldest` - remove N oldest points (Int32)
 
+### fabrik_ik_solver
+FABRIK IK solver for 8-segment delta robot. Processes trajectory points sequentially and outputs motor commands. **Uses multithreaded execution for responsive, non-blocking operation.**
+
+**Node:**
+- `fabrik_ik_solver_node`: Solves IK for trajectory points, visualizes J/S points
+
+**Launch Files:**
+- `fabrik_ik_solver.launch.py` - IK solver with visualization
+
+**Messages:**
+- `MotorCommand.msg` - motor positions (24 motors), joint angles, convergence info
+- `FabrikVisualization.msg` - S-points, J-points, target, approach point
+
+**Topics:**
+- `/motor_commands` - motor positions for robot control
+- `/fabrik_visualization` - raw FABRIK data
+- `/fabrik_markers` - RViz visualization markers (S/J points)
+
+**Parameters:**
+- `num_segments` - number of segments (default: 8)
+- `tolerance` - convergence tolerance in meters (default: 0.001)
+- `max_iterations` - maximum FABRIK iterations (default: 50)
+- `enable_visualization` - toggle J/S point visualization (default: true)
+- `use_hot_start` - use previous solution as starting point (default: true)
+
+**Multithreading Implementation (Professional ROS2 Pattern):**
+- `MultiThreadedExecutor` with 4 worker threads - enables parallel callback processing
+- `ReentrantCallbackGroup` - allows trajectory callbacks to run concurrently
+- Thread-safe locking (`threading.Lock`) - prevents race conditions on processing flag
+- Try-finally blocks - ensures cleanup even on errors
+- **Result**: IK solving doesn't block marker dragging or TF broadcasting
+
+**Key Files:**
+- `fabrik/` - FABRIK algorithm implementation (in package)
+- `/robot_constants.py` - delta robot physical parameters (workspace root)
+
+**Visualization:**
+- S-points: Blue spheres (30mm) + blue chain line
+- J-points: Green spheres (30mm) + green chain line
+
 ## Markers
 
 | Name | Color | Size | Initial Position | TF Frame |
@@ -74,7 +117,26 @@ map (static)
 **Trajectory Tracking:**
 - 5Hz sampling checks TF positions
 - Only records when position changes (>1e-6 tolerance)
-- Infinite memory growth (external deletion via topics)
+- Points deleted by FABRIK IK solver after processing
+
+**FABRIK IK Solving:**
+- Processes trajectory points sequentially (oldest first)
+- Uses hot start (previous solution) for faster convergence
+- Deletes processed points automatically via `/clear_oldest`
+- Visualizes S-points (blue spheres + blue chain), J-points (green spheres + green chain) in RViz
+- Outputs 24 motor positions (3 motors × 8 segments)
+
+## RViz Configuration
+
+**Package-level configs** (for individual testing):
+- `interactive_tf_markers/rviz/interactive_markers.rviz` - markers only
+- Individual packages launch with their own minimal configs
+
+**Workspace-level config** (for complete system):
+- `/home/yuuki/ROS2/rviz/main.rviz` - combines all visualizations
+- Used by main.launch.py for the complete system
+
+This separation keeps package configs minimal and focused, while the main config includes all system visualizations (markers, FABRIK J/S points, trajectory, etc.).
 
 ## Launch
 
@@ -84,9 +146,10 @@ cd ~/ROS2
 source install/setup.bash
 ros2 launch main.launch.py
 
-# Individual packages
-ros2 launch interactive_tf_markers interactive_markers.launch.py
+# Individual packages (with their own RViz configs for testing)
+ros2 launch interactive_tf_markers interactive_markers_with_rviz.launch.py
 ros2 launch trajectory_tracker trajectory_tracker.launch.py
+ros2 launch fabrik_ik_solver fabrik_ik_solver.launch.py
 ```
 
 ## Build
@@ -117,4 +180,8 @@ ros2 topic echo /trajectory
 # Clear trajectory
 ros2 topic pub /clear_trajectory std_msgs/Empty "{}"
 ros2 topic pub /clear_oldest std_msgs/Int32 "data: 10"
+
+# Monitor motor commands
+ros2 topic echo /motor_commands
+ros2 topic echo /fabrik_visualization
 ```
