@@ -6,11 +6,10 @@ from fabrik_ik_solver.msg import MotorCommand
 from sensor_msgs.msg import JointState
 import numpy as np
 import math
-import sys
 
-# Add robot_constants to path
-sys.path.append('/home/yuuki/ROS2')
-import robot_constants as rc
+from robot_config import physical as phys_config
+from robot_config import motion as motion_config
+from robot_config import system as sys_config
 
 
 class MotorToJointConverterNode(Node):
@@ -20,30 +19,30 @@ class MotorToJointConverterNode(Node):
         # Subscribe to smoothed motor commands
         self.motor_sub = self.create_subscription(
             MotorCommand,
-            '/smoothed_motor_commands',
+            sys_config.TOPIC_SMOOTHED_MOTOR_COMMANDS,
             self.motor_command_callback,
-            10
+            sys_config.QUEUE_SIZE_DEFAULT
         )
 
         # Publish joint states
         self.joint_pub = self.create_publisher(
             JointState,
-            '/joint_states',
-            10
+            sys_config.TOPIC_JOINT_STATES,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
 
         self.get_logger().info('Motor to Joint Converter started')
-        self.get_logger().info(f'  Segments: {rc.NUM_SEGMENTS}')
+        self.get_logger().info(f'  Segments: {phys_config.NUM_SEGMENTS}')
         self.get_logger().info(f'  Motors per segment: 3')
-        self.get_logger().info(f'  Total motors: {rc.NUM_MOTORS}')
+        self.get_logger().info(f'  Total motors: {phys_config.NUM_MOTORS}')
 
     def motor_command_callback(self, msg: MotorCommand):
         """Convert motor positions to joint angles and publish JointState"""
         # Motor positions are in the joint_angles field (24 values)
         motor_positions = msg.motor_positions
 
-        if len(motor_positions) != rc.NUM_MOTORS:
-            self.get_logger().error(f'Expected {rc.NUM_MOTORS} motor positions, got {len(motor_positions)}')
+        if len(motor_positions) != phys_config.NUM_MOTORS:
+            self.get_logger().error(f'Expected {phys_config.NUM_MOTORS} motor positions, got {len(motor_positions)}')
             return
 
         # Convert to joint states
@@ -53,7 +52,7 @@ class MotorToJointConverterNode(Node):
         joint_state.position = []
 
         # Process each segment (3 motors → 3 joints per segment)
-        for seg_idx in range(rc.NUM_SEGMENTS):
+        for seg_idx in range(phys_config.NUM_SEGMENTS):
             # Extract motor positions for this segment
             motor_start = seg_idx * 3
             z_A = motor_positions[motor_start + 0]
@@ -117,7 +116,7 @@ class MotorToJointConverterNode(Node):
         fermat_point = self.calculate_fermat_point(A_point, B_point, C_point)
 
         # Calculate prismatic joint (extension along Z)
-        prismatic = 2.0 * fermat_point[2]
+        prismatic = motion_config.MOTOR_TO_JOINT_PRISMATIC_MULTIPLIER * fermat_point[2]
 
         # Calculate roll and pitch from direction vector
         roll = -math.atan2(direction[1], direction[2])
@@ -159,7 +158,7 @@ class MotorToJointConverterNode(Node):
         gamma = math.acos(np.clip(np.dot(neg_BC, CA) / (np.linalg.norm(BC) * np.linalg.norm(CA)), -1.0, 1.0))
 
         # Calculate lambda values
-        epsilon = 1e-10
+        epsilon = motion_config.MOTOR_TO_JOINT_DIVISION_EPSILON
         sin_alpha = math.sin(alpha + math.pi / 3)
         sin_beta = math.sin(beta + math.pi / 3)
         sin_gamma = math.sin(gamma + math.pi / 3)
@@ -178,19 +177,19 @@ class MotorToJointConverterNode(Node):
 
     def get_base_position_A(self) -> tuple:
         """Get base position for motor A (in meters) - at 90° (0, r)"""
-        r = rc.ACTUATOR_RADIUS
+        r = phys_config.ACTUATOR_RADIUS
         return (0.0, r, 0.0)
 
     def get_base_position_B(self) -> tuple:
         """Get base position for motor B (in meters) - at 330° (-30°)"""
-        r = rc.ACTUATOR_RADIUS
-        angle = -math.pi / 6.0  # -30° = 330°
+        r = phys_config.ACTUATOR_RADIUS
+        angle = phys_config.MOTOR_B_ANGLE
         return (r * math.cos(angle), r * math.sin(angle), 0.0)
 
     def get_base_position_C(self) -> tuple:
         """Get base position for motor C (in meters) - at 210° (-150°)"""
-        r = rc.ACTUATOR_RADIUS
-        angle = -5.0 * math.pi / 6.0  # -150° = 210°
+        r = phys_config.ACTUATOR_RADIUS
+        angle = phys_config.MOTOR_C_ANGLE
         return (r * math.cos(angle), r * math.sin(angle), 0.0)
 
 
