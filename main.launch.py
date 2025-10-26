@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Main launch file for the complete system.
-Launches interactive markers, trajectory tracker, FABRIK IK solver, and RViz with main config.
+Launches interactive markers, trajectory tracker, FABRIK IK solver, motor trajectory smoother, and RViz with main config.
 """
 
 from launch import LaunchDescription
@@ -18,6 +18,7 @@ def generate_launch_description():
     interactive_markers_pkg = FindPackageShare('interactive_tf_markers')
     trajectory_tracker_pkg = FindPackageShare('trajectory_tracker')
     fabrik_ik_solver_pkg = FindPackageShare('fabrik_ik_solver')
+    motor_smoother_pkg = FindPackageShare('motor_trajectory_smoother')
 
     # Get main RViz config path
     main_rviz_config = os.path.join(os.path.dirname(__file__), 'rviz', 'main.rviz')
@@ -55,6 +56,17 @@ def generate_launch_description():
         ])
     )
 
+    # Include motor trajectory smoother
+    motor_smoother_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                motor_smoother_pkg,
+                'launch',
+                'motor_trajectory_smoother.launch.py'
+            ])
+        ])
+    )
+
     # Launch RViz with main config
     rviz_node = Node(
         package='rviz2',
@@ -68,5 +80,6 @@ def generate_launch_description():
         interactive_markers_launch,
         trajectory_tracker_launch,
         fabrik_ik_solver_launch,
+        motor_smoother_launch,
         rviz_node,
     ])
