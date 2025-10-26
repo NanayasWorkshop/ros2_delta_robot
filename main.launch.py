@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Main launch file for the complete system.
-Launches interactive markers, trajectory tracker, FABRIK IK solver, motor trajectory smoother, and RViz with main config.
+Launches interactive markers, trajectory tracker, FABRIK IK solver, motor trajectory smoother,
+motor-to-joint converter, robot state publisher, and RViz with main config.
 """
 
 from launch import LaunchDescription
@@ -19,6 +20,8 @@ def generate_launch_description():
     trajectory_tracker_pkg = FindPackageShare('trajectory_tracker')
     fabrik_ik_solver_pkg = FindPackageShare('fabrik_ik_solver')
     motor_smoother_pkg = FindPackageShare('motor_trajectory_smoother')
+    motor_converter_pkg = FindPackageShare('motor_to_joint_converter')
+    robot_description_pkg = FindPackageShare('delta_robot_description')
 
     # Get main RViz config path
     main_rviz_config = os.path.join(os.path.dirname(__file__), 'rviz', 'main.rviz')
@@ -67,6 +70,28 @@ def generate_launch_description():
         ])
     )
 
+    # Include motor to joint converter
+    motor_converter_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                motor_converter_pkg,
+                'launch',
+                'motor_to_joint_converter.launch.py'
+            ])
+        ])
+    )
+
+    # Include robot state publisher (for URDF visualization)
+    robot_state_publisher_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                robot_description_pkg,
+                'launch',
+                'display.launch.py'
+            ])
+        ])
+    )
+
     # Launch RViz with main config
     rviz_node = Node(
         package='rviz2',
@@ -81,5 +106,7 @@ def generate_launch_description():
         trajectory_tracker_launch,
         fabrik_ik_solver_launch,
         motor_smoother_launch,
+        motor_converter_launch,
+        robot_state_publisher_launch,
         rviz_node,
     ])

@@ -1,0 +1,286 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="modular_serial_robot">
+
+  <!-- Robot Dimensional Constants -->
+  <xacro:property name="base_height" value="0.0115"/>           <!-- 11.5mm -->
+  <xacro:property name="segment_offset" value="0.0615"/>        <!-- 61.5mm -->
+  <xacro:property name="prismatic_range" value="0.0108"/>       <!-- ±10.8mm -->
+  <xacro:property name="revolute_limit" value="0.5236"/>        <!-- ±30° in radians -->
+  <xacro:property name="actuator_radius" value="0.02485"/>      <!-- 24.85mm - radius of actuator triangle -->
+
+  <!-- Robot Segment Macro -->
+  <xacro:macro name="robot_segment" params="segment_name parent_link *origin">
+
+    <!-- Base Link for this segment -->
+    <link name="${segment_name}_base_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://delta_robot_description/meshes/base.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="gray_${segment_name}">
+          <color rgba="0.5 0.5 0.5 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0.010" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="0.043" length="0.020"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="1.0"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.010" ixy="0" ixz="0" iyy="0.010" iyz="0" izz="0.010"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 0: Parent to Segment Base Link -->
+    <joint name="${segment_name}_joint0" type="fixed">
+      <parent link="${parent_link}"/>
+      <child link="${segment_name}_base_link"/>
+      <xacro:insert_block name="origin"/>
+    </joint>
+
+    <!-- Link 1 - Virtual link for first joint -->
+    <link name="${segment_name}_link1">
+      <inertial>
+        <mass value="0.1"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <!-- Link 2 - Virtual link for second joint -->
+    <link name="${segment_name}_link2">
+      <inertial>
+        <mass value="0.1"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <!-- Link 3 - Virtual link for first prismatic joint -->
+    <link name="${segment_name}_link3">
+      <inertial>
+        <mass value="0.1"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <!-- Middle Link - Using middle.stl mesh (positioned between joints) -->
+    <link name="${segment_name}_middle_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://delta_robot_description/meshes/middle.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="blue_${segment_name}">
+          <color rgba="0.0 0.0 1.0 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>  <!-- Centered - no shift needed -->
+        <geometry>
+          <cylinder radius="0.043" length="0.075"/>  <!-- D86mm = R43mm, H75mm -->
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="0.5"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.005" ixy="0" ixz="0" iyy="0.005" iyz="0" izz="0.005"/>
+      </inertial>
+    </link>
+
+    <!-- Link 4 - Virtual link for second prismatic joint -->
+    <link name="${segment_name}_link4">
+      <inertial>
+        <mass value="0.1"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <!-- Link 5 - Virtual link for fourth rotational joint -->
+    <link name="${segment_name}_link5">
+      <inertial>
+        <mass value="0.1"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <!-- Link 6 - Virtual link for fifth rotational joint -->
+    <link name="${segment_name}_link6">
+      <inertial>
+        <mass value="0.1"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+
+    <!-- End Link - Using base_top.stl mesh -->
+    <link name="${segment_name}_end_link">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <mesh filename="package://delta_robot_description/meshes/base_top.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="red_${segment_name}">
+          <color rgba="1.0 0.0 0.0 1.0"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 -0.010" rpy="0 0 0"/>  <!-- Move down 50% of height (10mm) so end stays at top -->
+        <geometry>
+          <cylinder radius="0.043" length="0.020"/>  <!-- D86mm = R43mm, H20mm -->
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="0.3"/>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <inertia ixx="0.003" ixy="0" ixz="0" iyy="0.003" iyz="0" izz="0.003"/>
+      </inertial>
+    </link>
+
+    <!-- Joint 1: Base to Link1 at 11.5mm - Revolute around X axis ±30° -->
+    <joint name="${segment_name}_joint1" type="revolute">
+      <parent link="${segment_name}_base_link"/>
+      <child link="${segment_name}_link1"/>
+      <origin xyz="0 0 ${base_height}" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="-${revolute_limit}" upper="${revolute_limit}" effort="50" velocity="1.0"/>
+    </joint>
+
+    <!-- Joint 2: Link1 to Link2 - Revolute around Y axis ±30° -->
+    <joint name="${segment_name}_joint2" type="revolute">
+      <parent link="${segment_name}_link1"/>
+      <child link="${segment_name}_link2"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-${revolute_limit}" upper="${revolute_limit}" effort="50" velocity="1.0"/>
+    </joint>
+
+    <!-- Joint 3: Link2 to Link3 - First Prismatic ±5.5mm (half range) -->
+    <joint name="${segment_name}_joint3" type="prismatic">
+      <parent link="${segment_name}_link2"/>
+      <child link="${segment_name}_link3"/>
+      <origin xyz="0 0 ${segment_offset}" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-${prismatic_range}" upper="${prismatic_range}" effort="30" velocity="0.1"/>
+    </joint>
+
+    <!-- Joint 4: Link3 to Middle Link - Fixed connection to middle mesh -->
+    <joint name="${segment_name}_joint4" type="fixed">
+      <parent link="${segment_name}_link3"/>
+      <child link="${segment_name}_middle_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Joint 5: Middle Link to Link4 - Second Prismatic ±5.5mm (mimics joint3) -->
+    <joint name="${segment_name}_joint5" type="prismatic">
+      <parent link="${segment_name}_middle_link"/>
+      <child link="${segment_name}_link4"/>
+      <origin xyz="0 0 ${segment_offset}" rpy="0 0 0"/>
+      <axis xyz="0 0 1"/>
+      <limit lower="-${prismatic_range}" upper="${prismatic_range}" effort="30" velocity="0.1"/>
+      <mimic joint="${segment_name}_joint3" multiplier="1.0" offset="0.0"/>
+    </joint>
+
+    <!-- Joint 6: Link4 to Link5 - Revolute around Y axis ±30° (mimics joint2) -->
+    <joint name="${segment_name}_joint6" type="revolute">
+      <parent link="${segment_name}_link4"/>
+      <child link="${segment_name}_link5"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-${revolute_limit}" upper="${revolute_limit}" effort="40" velocity="1.0"/>
+      <mimic joint="${segment_name}_joint2" multiplier="1.0" offset="0.0"/>
+    </joint>
+
+    <!-- Joint 7: Link5 to Link6 - Revolute around X axis ±30° (mimics joint1) -->
+    <joint name="${segment_name}_joint7" type="revolute">
+      <parent link="${segment_name}_link5"/>
+      <child link="${segment_name}_link6"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="-${revolute_limit}" upper="${revolute_limit}" effort="40" velocity="1.0"/>
+      <mimic joint="${segment_name}_joint1" multiplier="1.0" offset="0.0"/>
+    </joint>
+
+    <!-- Joint 8: Link6 to End Link -->
+    <joint name="${segment_name}_joint8" type="fixed">
+      <parent link="${segment_name}_link6"/>
+      <child link="${segment_name}_end_link"/>
+      <origin xyz="0 0 ${base_height}" rpy="0 0 0"/>
+    </joint>
+
+  </xacro:macro>
+
+  <!-- Base Link (only for first segment) -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <mesh filename="package://delta_robot_description/meshes/base.stl" scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.010" rpy="0 0 0"/>  <!-- Move up 50% of height (10mm) -->
+      <geometry>
+        <cylinder radius="0.043" length="0.020"/>  <!-- D86mm = R43mm, H20mm -->
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="1.0"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <inertia ixx="0.010" ixy="0" ixz="0" iyy="0.010" iyz="0" izz="0.010"/>
+    </inertial>
+  </link>
+
+  <!-- Create an 8-segment robot -->
+
+  <!-- Segment 1: Attached to base_link -->
+  <xacro:robot_segment segment_name="seg1" parent_link="base_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+  <!-- Segment 2: Attached to seg1_end_link -->
+  <xacro:robot_segment segment_name="seg2" parent_link="seg1_end_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+  <!-- Segment 3: Attached to seg2_end_link -->
+  <xacro:robot_segment segment_name="seg3" parent_link="seg2_end_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+  <!-- Segment 4: Attached to seg3_end_link -->
+  <xacro:robot_segment segment_name="seg4" parent_link="seg3_end_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+  <!-- Segment 5: Attached to seg4_end_link -->
+  <xacro:robot_segment segment_name="seg5" parent_link="seg4_end_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+  <!-- Segment 6: Attached to seg5_end_link -->
+  <xacro:robot_segment segment_name="seg6" parent_link="seg5_end_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+  <!-- Segment 7: Attached to seg6_end_link -->
+  <xacro:robot_segment segment_name="seg7" parent_link="seg6_end_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+  <!-- Segment 8: Attached to seg7_end_link -->
+  <xacro:robot_segment segment_name="seg8" parent_link="seg7_end_link">
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </xacro:robot_segment>
+
+</robot>
