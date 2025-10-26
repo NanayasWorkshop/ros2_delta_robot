@@ -50,6 +50,9 @@ class FabrikIKSolverNode(Node):
         self.current_target_frame = None
         self.current_approach_frame = None
 
+        # Track last approach point to detect changes
+        self.last_approach_point = None
+
         # Motor command history
         self.motor_command_history = []
 
@@ -141,9 +144,26 @@ class FabrikIKSolverNode(Node):
                     approach_point.pose.position.z
                 ])
 
-            # Log solving
+            # Check if approach point changed - add tiny offset to invalidate hot start convergence
+            approach_changed = False
+            if self.last_approach_point is not None and approach is not None:
+                approach_changed = np.linalg.norm(approach - self.last_approach_point) > 1e-6
+                if approach_changed:
+                    # Add 0.1mm offset to target to force FABRIK to iterate
+                    # This ensures approach constraint is applied even when target hasn't moved
+                    target = target + np.array([1e-4, 0, 0])
+                    self.get_logger().info(f'  Approach changed! Added 0.1mm offset to target')
+
+            # Store current approach point for next comparison
+            self.last_approach_point = approach.copy() if approach is not None else None
+
+            # Log hot start status
+            hot_start_active = self.fabrik.has_previous_solution and self.use_hot_start
             self.get_logger().info(
                 f'Solving IK for target: ({target[0]:.3f}, {target[1]:.3f}, {target[2]:.3f})'
+            )
+            self.get_logger().info(
+                f'  Hot start: {hot_start_active}, Approach changed: {approach_changed}'
             )
 
             # Solve IK

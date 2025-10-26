@@ -6,16 +6,55 @@ Complete system for delta robot inverse kinematics: Interactive markers in RViz 
 ## System Flow
 
 ```mermaid
-graph LR
-    USER[User Drags Marker] --> RVIZ[RViz]
-    RVIZ --> IM[interactive_marker_tf_node]
-    IM -->|10Hz Timer| TF[TF Broadcaster]
-    TF --> TRACKER[trajectory_tracker]
-    TF --> RVIZ
-    TRACKER -->|trajectory topic| FABRIK[fabrik_ik_solver]
-    FABRIK -->|motor_commands| MOTORS[Motor Commands]
-    FABRIK -->|fabrik_markers| RVIZ
-    FABRIK -->|clear_oldest| TRACKER
+graph TB
+    subgraph User["User Interaction"]
+        USER[User Drags Markers in RViz]
+    end
+
+    subgraph Markers["Interactive Markers (interactive_tf_markers)"]
+        IM[interactive_marker_tf_node]
+        TIMER[10Hz Timer]
+        TFPUB[TF Broadcaster]
+    end
+
+    subgraph Tracker["Trajectory Tracker (trajectory_tracker)"]
+        TFLISTEN[TF Listener 5Hz]
+        BUFFER[Trajectory Buffer]
+        TRAJ_PUB[Trajectory Publisher]
+    end
+
+    subgraph FABRIK["FABRIK IK Solver (fabrik_ik_solver)"]
+        IK_SUB[Trajectory Subscriber]
+        SOLVER[FABRIK Algorithm<br/>Hot Start enabled]
+        MOTORS_PUB[Motor Commands Publisher]
+        VIZ_PUB[Visualization Publisher]
+        CLEAR_PUB[Clear Oldest Publisher]
+    end
+
+    subgraph Output["Output"]
+        RVIZ[RViz Visualization]
+        MOTOR_CMD[Motor Commands<br/>24 motors]
+    end
+
+    USER -->|Drag target/direction| IM
+    IM --> TIMER
+    TIMER -->|10Hz| TFPUB
+    TFPUB -->|TF: target & direction| TFLISTEN
+    TFLISTEN -->|Position changed?| BUFFER
+    BUFFER -->|/trajectory| TRAJ_PUB
+    TRAJ_PUB --> IK_SUB
+    IK_SUB -->|Process oldest point| SOLVER
+    SOLVER -->|24 motor positions| MOTORS_PUB
+    SOLVER -->|S-points, J-points| VIZ_PUB
+    SOLVER -->|Delete processed| CLEAR_PUB
+    MOTORS_PUB --> MOTOR_CMD
+    VIZ_PUB -->|MarkerArray| RVIZ
+    TFPUB -->|TF frames| RVIZ
+    CLEAR_PUB -->|/clear_oldest Int32| BUFFER
+
+    style SOLVER fill:#e1f5ff
+    style BUFFER fill:#fff4e1
+    style MOTOR_CMD fill:#e8f5e9
 ```
 
 ## Packages
@@ -121,7 +160,15 @@ map (static)
 
 **FABRIK IK Solving:**
 - Processes trajectory points sequentially (oldest first)
-- Uses hot start (previous solution) for faster convergence
+- **Hot Start Optimization**: Uses previous robot configuration (S/J points) as starting point
+  - Stored in FABRIK solver instance (`self.last_s_points`, `self.last_j_points`)
+  - Persists across solve calls - reduces iterations from 50 → 5-7
+  - First solve: Cold start (default configuration)
+  - Subsequent solves: Hot start (last known position)
+- **Approach Point Handling**: Direction marker controls end-effector orientation
+  - Tracks last approach point to detect changes
+  - When approach changes: Adds 0.1mm offset to target to force iteration
+  - Ensures approach constraint is applied even when target unchanged
 - Deletes processed points automatically via `/clear_oldest`
 - Visualizes S-points (blue spheres + blue chain), J-points (green spheres + green chain) in RViz
 - Outputs 24 motor positions (3 motors × 8 segments)

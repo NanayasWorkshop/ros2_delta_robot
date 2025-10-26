@@ -24,14 +24,14 @@ class FabrikSolver:
     - Motor position calculation from solved S-points
     """
 
-    def __init__(self, num_segments: int, default_tolerance: float = 0.001,
+    def __init__(self, num_segments: int, default_tolerance: float = 0.0001,
                  default_max_iterations: int = 50):
         """
         Initialize FABRIK solver.
 
         Args:
             num_segments: Number of segments in the robot
-            default_tolerance: Default convergence tolerance in meters (default 1mm)
+            default_tolerance: Default convergence tolerance in meters (default 0.1mm)
             default_max_iterations: Default maximum iterations (default 50)
         """
         self.num_segments = num_segments
