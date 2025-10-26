@@ -7,15 +7,17 @@ from geometry_msgs.msg import Pose
 from std_msgs.msg import Empty, Int32
 from trajectory_tracker.msg import TrajectoryPoint, Trajectory
 
+from robot_config import system as sys_config
+
 
 class TrajectoryTrackerNode(Node):
     def __init__(self):
         super().__init__('trajectory_tracker_node')
 
-        # Declare parameters
-        self.declare_parameter('tracked_frames', ['target', 'direction'])
-        self.declare_parameter('reference_frame', 'world')
-        self.declare_parameter('sample_rate', 5.0)
+        # Declare parameters with defaults from config
+        self.declare_parameter('tracked_frames', sys_config.TRAJECTORY_TRACKED_FRAMES)
+        self.declare_parameter('reference_frame', sys_config.TRAJECTORY_REFERENCE_FRAME)
+        self.declare_parameter('sample_rate', sys_config.TRAJECTORY_SAMPLE_RATE)
 
         # Get parameters
         self.tracked_frames = self.get_parameter('tracked_frames').value
@@ -35,27 +37,27 @@ class TrajectoryTrackerNode(Node):
         # Publishers
         self.trajectory_pub = self.create_publisher(
             Trajectory,
-            '/trajectory',
-            10
+            sys_config.TOPIC_TRAJECTORY,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
         self.status_pub = self.create_publisher(
             Int32,
-            '/trajectory_status',
-            10
+            sys_config.TOPIC_TRAJECTORY_STATUS,
+            sys_config.QUEUE_SIZE_DEFAULT
         )
 
         # Subscribers for control
         self.clear_sub = self.create_subscription(
             Empty,
-            '/clear_trajectory',
+            sys_config.TOPIC_CLEAR_TRAJECTORY,
             self.clear_callback,
-            10
+            sys_config.QUEUE_SIZE_DEFAULT
         )
         self.clear_oldest_sub = self.create_subscription(
             Int32,
-            '/clear_oldest',
+            sys_config.TOPIC_CLEAR_OLDEST,
             self.clear_oldest_callback,
-            10
+            sys_config.QUEUE_SIZE_DEFAULT
         )
 
         # Timer for periodic sampling
@@ -92,9 +94,9 @@ class TrajectoryTrackerNode(Node):
                 if frame_name in self.last_positions:
                     last_pos = self.last_positions[frame_name]
                     # Compare with small tolerance for floating point
-                    if (abs(current_pos[0] - last_pos[0]) < 1e-6 and
-                        abs(current_pos[1] - last_pos[1]) < 1e-6 and
-                        abs(current_pos[2] - last_pos[2]) < 1e-6):
+                    if (abs(current_pos[0] - last_pos[0]) < sys_config.TRAJECTORY_POSITION_TOLERANCE and
+                        abs(current_pos[1] - last_pos[1]) < sys_config.TRAJECTORY_POSITION_TOLERANCE and
+                        abs(current_pos[2] - last_pos[2]) < sys_config.TRAJECTORY_POSITION_TOLERANCE):
                         # Position hasn't changed, skip recording
                         continue
 
@@ -123,7 +125,7 @@ class TrajectoryTrackerNode(Node):
                 )
 
             except (LookupException, ConnectivityException, ExtrapolationException) as e:
-                self.get_logger().warning(f'TF lookup failed for {frame_name}: {e}', throttle_duration_sec=1.0)
+                self.get_logger().warning(f'TF lookup failed for {frame_name}: {e}', throttle_duration_sec=sys_config.TRAJECTORY_WARNING_THROTTLE)
 
         # Publish trajectory
         self.publish_trajectory()
