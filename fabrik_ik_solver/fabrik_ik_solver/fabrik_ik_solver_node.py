@@ -89,6 +89,13 @@ class FabrikIKSolverNode(Node):
             '/clear_oldest',
             10
         )
+        # Publisher for motor positions visualization (PlotJuggler)
+        from std_msgs.msg import Float64MultiArray
+        self.fabrik_motor_pos_pub = self.create_publisher(
+            Float64MultiArray,
+            '/fabrik/motor_positions',
+            10
+        )
 
         self.get_logger().info(f'FABRIK IK Solver started')
         self.get_logger().info(f'  Segments: {num_segments}')
@@ -214,6 +221,12 @@ class FabrikIKSolverNode(Node):
         msg.joint_angles = [float(x) for x in result['joint_angles']]  # Convert to Python floats
 
         self.motor_pub.publish(msg)
+
+        # Publish motor positions for visualization
+        from std_msgs.msg import Float64MultiArray
+        motor_viz_msg = Float64MultiArray()
+        motor_viz_msg.data = [float(x) for x in result['motor_positions']]
+        self.fabrik_motor_pos_pub.publish(motor_viz_msg)
 
         # Log motor positions summary
         self.get_logger().info(
