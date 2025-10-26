@@ -117,7 +117,7 @@ class MotorTrajectorySmootherNode(Node):
         )
 
     def publish_smooth_trajectory(self):
-        """Publish smooth motor trajectory at fixed rate using Ruckig"""
+        """Publish smooth motor trajectory at fixed rate using Ruckig with look-ahead"""
         # If no waypoints, do nothing
         if not self.waypoint_buffer:
             if self.is_moving:
@@ -125,14 +125,11 @@ class MotorTrajectorySmootherNode(Node):
                 self.is_moving = False
             return
 
-        # Get next target waypoint (first in buffer)
-        target_waypoint = self.waypoint_buffer[0]
-        is_final_waypoint = (len(self.waypoint_buffer) == 1)
-
         # Initialize Ruckig state with first waypoint if not yet initialized
         if not self.ruckig_initialized:
+            first_waypoint = self.waypoint_buffer[0]
             # Initialize current state - assign whole lists!
-            self.input_param.current_position = list(target_waypoint.motor_positions)
+            self.input_param.current_position = list(first_waypoint.motor_positions)
             self.input_param.current_velocity = [0.0] * rc.NUM_MOTORS
             self.input_param.current_acceleration = [0.0] * rc.NUM_MOTORS
             self.ruckig_initialized = True
@@ -140,31 +137,34 @@ class MotorTrajectorySmootherNode(Node):
             self.get_logger().info(f'Ruckig initialized at position: [{self.input_param.current_position[0]:.6f}, {self.input_param.current_position[1]:.6f}, {self.input_param.current_position[2]:.6f}]')
             return  # Wait for next waypoint
 
-        # Debug: Log waypoint data BEFORE setting target
-        self.get_logger().info(
-            f'Waypoint motor_positions[0-2]: [{target_waypoint.motor_positions[0]:.6f}, {target_waypoint.motor_positions[1]:.6f}, {target_waypoint.motor_positions[2]:.6f}]'
-        )
+        # Use look-ahead with intermediate_positions for smooth fly-through
+        # Target is the first waypoint, intermediate_positions contains the rest (up to a limit)
+        target_waypoint = self.waypoint_buffer[0]
+        is_final_waypoint = (len(self.waypoint_buffer) == 1)
 
-        # Set target position from waypoint - assign whole list!
+        # Set target position (first waypoint)
         self.input_param.target_position = list(target_waypoint.motor_positions)
 
-        # Debug: Log first 3 motors current and target
-        self.get_logger().info(
-            f'Motors[0-2] - Current: [{self.input_param.current_position[0]:.6f}, {self.input_param.current_position[1]:.6f}, {self.input_param.current_position[2]:.6f}] | '
-            f'Target: [{self.input_param.target_position[0]:.6f}, {self.input_param.target_position[1]:.6f}, {self.input_param.target_position[2]:.6f}]'
-        )
+        # Set intermediate positions (look-ahead for smooth trajectory planning)
+        # Limit to next 5-10 waypoints to avoid excessive computation
+        max_lookahead = min(10, len(self.waypoint_buffer) - 1)
+        self.input_param.intermediate_positions = []
+        for i in range(1, max_lookahead + 1):
+            if i < len(self.waypoint_buffer):
+                self.input_param.intermediate_positions.append(
+                    list(self.waypoint_buffer[i].motor_positions)
+                )
 
-        # Set target velocity based on whether this is final waypoint
+        # Set target velocity: stop only at final waypoint
         if is_final_waypoint:
-            # Final waypoint: stop completely
             target_vel = rc.RUCKIG_FINAL_TARGET_VELOCITY
         else:
-            # Intermediate waypoint: pass through at max velocity
-            target_vel = rc.MOTOR_MAX_VELOCITY
+            # Let Ruckig decide velocity for smooth fly-through
+            target_vel = 0.0  # Ruckig will optimize velocity for smooth trajectory
 
-        for i in range(rc.NUM_MOTORS):
-            self.input_param.target_velocity[i] = target_vel
-            self.input_param.target_acceleration[i] = rc.RUCKIG_TARGET_ACCELERATION
+        # Assign target velocity and acceleration - whole lists!
+        self.input_param.target_velocity = [target_vel] * rc.NUM_MOTORS
+        self.input_param.target_acceleration = [rc.RUCKIG_TARGET_ACCELERATION] * rc.NUM_MOTORS
 
         # Update Ruckig trajectory
         result = self.ruckig.update(self.input_param, self.output_param)
@@ -195,7 +195,7 @@ class MotorTrajectorySmootherNode(Node):
         if result == Result.Finished:
             self.waypoint_buffer.pop(0)
             self.get_logger().info(
-                f'Waypoint reached | Remaining: {len(self.waypoint_buffer)}'
+                f'Waypoint reached | Remaining: {len(self.waypoint_buffer)} | Lookahead: {len(self.input_param.intermediate_positions)}'
             )
 
     def _publish_visualization_data(self):
