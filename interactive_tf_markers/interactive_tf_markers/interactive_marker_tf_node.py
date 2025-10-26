@@ -8,6 +8,9 @@ from geometry_msgs.msg import Point, Pose, Quaternion, TransformStamped
 from tf2_ros import TransformBroadcaster
 import math
 
+from robot_config import visualization as viz_config
+from robot_config import system as sys_config
+
 
 class InteractiveMarkerTFNode(Node):
     def __init__(self):
@@ -18,22 +21,32 @@ class InteractiveMarkerTFNode(Node):
 
         # Store marker poses for continuous TF broadcasting
         self.marker_poses = {
-            'target': Pose(),
-            'direction': Pose()
+            sys_config.FRAME_TARGET: Pose(),
+            sys_config.FRAME_DIRECTION: Pose()
         }
 
         # Create interactive marker server
         self.server = InteractiveMarkerServer(self, 'interactive_markers')
 
-        # Create the two markers (positions in meters: mm/1000)
-        self.create_marker('target', [0.150, 0.0, 0.600], [1.0, 1.0, 0.0], 0.06)  # Yellow marker, 60mm at 150,0,600mm
-        self.create_marker('direction', [0.0, 0.0, 0.600], [0.0, 1.0, 1.0], 0.04)  # Cyan marker, 40mm at 0,0,600mm
+        # Create the two markers using config parameters
+        self.create_marker(
+            sys_config.FRAME_TARGET,
+            viz_config.MARKER_TARGET_POSITION,
+            viz_config.MARKER_TARGET_COLOR,
+            viz_config.MARKER_TARGET_SIZE
+        )
+        self.create_marker(
+            sys_config.FRAME_DIRECTION,
+            viz_config.MARKER_DIRECTION_POSITION,
+            viz_config.MARKER_DIRECTION_COLOR,
+            viz_config.MARKER_DIRECTION_SIZE
+        )
 
         # Apply changes
         self.server.applyChanges()
 
-        # Create timer to continuously broadcast TF (10Hz)
-        self.create_timer(0.1, self.broadcast_tf_timer)
+        # Create timer to continuously broadcast TF
+        self.create_timer(viz_config.MARKER_TF_BROADCAST_RATE, self.broadcast_tf_timer)
 
         self.get_logger().info('Interactive Marker TF Node started!')
         self.get_logger().info('Use the "Interact" tool in RViz to move Target and Direction markers')
@@ -44,10 +57,10 @@ class InteractiveMarkerTFNode(Node):
 
         # Create the interactive marker
         int_marker = InteractiveMarker()
-        int_marker.header.frame_id = 'world'
+        int_marker.header.frame_id = sys_config.FRAME_WORLD
         int_marker.name = name
         int_marker.description = name.capitalize()
-        int_marker.scale = 0.15  # Make controls smaller (default is 1.0)
+        int_marker.scale = viz_config.MARKER_CONTROL_SCALE
 
         # Set initial position
         int_marker.pose.position.x = position[0]
@@ -71,7 +84,7 @@ class InteractiveMarkerTFNode(Node):
         marker.color.r = color[0]
         marker.color.g = color[1]
         marker.color.b = color[2]
-        marker.color.a = 0.8
+        marker.color.a = viz_config.MARKER_ALPHA
 
         # Create a control to hold the marker
         marker_control = InteractiveMarkerControl()
@@ -165,7 +178,7 @@ class InteractiveMarkerTFNode(Node):
 
         # Set timestamp and frame info
         t.header.stamp = self.get_clock().now().to_msg()
-        t.header.frame_id = 'world'
+        t.header.frame_id = sys_config.FRAME_WORLD
         t.child_frame_id = frame_name
 
         # Set translation
