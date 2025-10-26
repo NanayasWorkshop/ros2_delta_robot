@@ -2,6 +2,8 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="modular_serial_robot">
 
   <!-- Robot Dimensional Constants -->
+  <!-- AUTO-GENERATED from robot_config.physical - DO NOT EDIT MANUALLY -->
+  <!-- To update: run scripts/generate_urdf.py -->
   <xacro:property name="base_height" value="0.0115"/>           <!-- 11.5mm -->
   <xacro:property name="segment_offset" value="0.0615"/>        <!-- 61.5mm -->
   <xacro:property name="prismatic_range" value="0.0108"/>       <!-- ±10.8mm -->
@@ -241,7 +243,11 @@
     </inertial>
   </link>
 
-  <!-- Create an 8-segment robot -->
+
+
+
+  <!-- Create a 5-segment robot -->
+  <!-- AUTO-GENERATED based on NUM_SEGMENTS=5 -->
 
   <!-- Segment 1: Attached to base_link -->
   <xacro:robot_segment segment_name="seg1" parent_link="base_link">
@@ -265,21 +271,6 @@
 
   <!-- Segment 5: Attached to seg4_end_link -->
   <xacro:robot_segment segment_name="seg5" parent_link="seg4_end_link">
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </xacro:robot_segment>
-
-  <!-- Segment 6: Attached to seg5_end_link -->
-  <xacro:robot_segment segment_name="seg6" parent_link="seg5_end_link">
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </xacro:robot_segment>
-
-  <!-- Segment 7: Attached to seg6_end_link -->
-  <xacro:robot_segment segment_name="seg7" parent_link="seg6_end_link">
-    <origin xyz="0 0 0" rpy="0 0 0"/>
-  </xacro:robot_segment>
-
-  <!-- Segment 8: Attached to seg7_end_link -->
-  <xacro:robot_segment segment_name="seg8" parent_link="seg7_end_link">
     <origin xyz="0 0 0" rpy="0 0 0"/>
   </xacro:robot_segment>
 

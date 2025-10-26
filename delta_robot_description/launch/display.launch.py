@@ -1,10 +1,31 @@
 import os
+import subprocess
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
+from launch.actions import DeclareLaunchArgument, OpaqueFunction
 from launch.substitutions import LaunchConfiguration, Command
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 from launch_ros.parameter_descriptions import ParameterValue
+
+
+def generate_urdf_from_config(context):
+    """Generate URDF from robot_config before launching"""
+    # Get package share directory
+    pkg_share = FindPackageShare('delta_robot_description').find('delta_robot_description')
+
+    # Path to generator script
+    generator_script = os.path.join(pkg_share, '..', '..', '..', '..', 'src', 'delta_robot_description', 'scripts', 'generate_urdf.py')
+
+    # Run generator if it exists
+    if os.path.exists(generator_script):
+        print("⚙ Generating URDF from robot_config...")
+        result = subprocess.run(['python3', generator_script], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(result.stdout)
+        else:
+            print(f"Warning: URDF generation failed: {result.stderr}")
+
+    return []
 
 
 def generate_launch_description():
@@ -47,6 +68,8 @@ def generate_launch_description():
             default_value='false',
             description='Use simulation time'
         ),
+        # Generate URDF from robot_config before launching
+        OpaqueFunction(function=generate_urdf_from_config),
         static_tf_node,
         robot_state_publisher_node,
     ])

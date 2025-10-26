@@ -58,7 +58,7 @@ FABRIK_CONE_HALF_ANGLE = REVOLUTE_LIMIT * 2
 # ROBOT CONFIGURATION
 # =============================================================================
 
-NUM_SEGMENTS = 8
+NUM_SEGMENTS = 5
 """Number of segments in the robot"""
 
 JOINTS_PER_SEGMENT = 3
