@@ -117,6 +117,11 @@ class TrajectoryTrackerNode(Node):
                 # Add to trajectory
                 self.trajectory_points.append(point)
 
+                # Log new point added
+                self.get_logger().info(
+                    f'Added point for {frame_name}: pos=({current_pos[0]:.3f}, {current_pos[1]:.3f}, {current_pos[2]:.3f}) | Total: {len(self.trajectory_points)}'
+                )
+
             except (LookupException, ConnectivityException, ExtrapolationException) as e:
                 self.get_logger().warning(f'TF lookup failed for {frame_name}: {e}', throttle_duration_sec=1.0)
 

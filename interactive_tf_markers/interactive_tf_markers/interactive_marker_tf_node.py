@@ -156,12 +156,6 @@ class InteractiveMarkerTFNode(Node):
         # Store updated pose (timer will broadcast it)
         self.marker_poses[marker_name] = pose
 
-        # Log position for debugging
-        self.get_logger().info(
-            f'{marker_name}: pos=({pose.position.x:.2f}, {pose.position.y:.2f}, {pose.position.z:.2f}) '
-            f'ori=({pose.orientation.x:.2f}, {pose.orientation.y:.2f}, {pose.orientation.z:.2f}, {pose.orientation.w:.2f})'
-        )
-
         # Update the marker (required to keep it synchronized)
         self.server.applyChanges()
 

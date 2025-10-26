@@ -12,7 +12,7 @@ graph LR
     IM -->|10Hz Timer| TF[TF Broadcaster]
     TF --> TRACKER[trajectory_tracker]
     TF --> RVIZ
-    TRACKER -->|5Hz Sample| TOPIC[/trajectory topic]
+    TRACKER -->|5Hz Sample| TOPIC[trajectory topic]
 ```
 
 ## Packages
