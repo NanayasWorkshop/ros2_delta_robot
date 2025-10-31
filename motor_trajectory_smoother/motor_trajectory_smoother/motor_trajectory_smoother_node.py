@@ -136,34 +136,55 @@ class MotorTrajectorySmootherNode(Node):
             self.get_logger().info(f'Ruckig initialized at position: [{self.input_param.current_position[0]:.6f}, {self.input_param.current_position[1]:.6f}, {self.input_param.current_position[2]:.6f}]')
             return  # Wait for next waypoint
 
-        # Use look-ahead with intermediate_positions for smooth fly-through
-        # Target is the first waypoint, intermediate_positions contains the rest (up to a limit)
-        target_waypoint = self.waypoint_buffer[0]
-        is_final_waypoint = (len(self.waypoint_buffer) == 1)
+        # BATCH MODE TEST: Wait until we have enough waypoints before starting
+        MIN_BUFFER_SIZE_TO_START = 20  # Wait for 20 waypoints (~4 seconds at 5 Hz)
 
-        # Set target position (first waypoint)
-        self.input_param.target_position = list(target_waypoint.motor_positions)
+        if len(self.waypoint_buffer) < MIN_BUFFER_SIZE_TO_START and not self.is_moving:
+            # Still collecting waypoints, wait...
+            self.get_logger().info(
+                f'Collecting waypoints... {len(self.waypoint_buffer)}/{MIN_BUFFER_SIZE_TO_START}',
+                throttle_duration_sec=1.0
+            )
+            return
 
-        # Set intermediate positions (look-ahead for smooth trajectory planning)
-        # Limit to next waypoints to avoid excessive computation
-        max_lookahead = min(motion_config.RUCKIG_MAX_LOOKAHEAD_WAYPOINTS, len(self.waypoint_buffer) - 1)
-        self.input_param.intermediate_positions = []
-        for i in range(1, max_lookahead + 1):
-            if i < len(self.waypoint_buffer):
+        if not self.is_moving and len(self.waypoint_buffer) >= MIN_BUFFER_SIZE_TO_START:
+            self.get_logger().info(f'✓ Buffer ready with {len(self.waypoint_buffer)} waypoints - starting trajectory!')
+
+        # Ruckig waypoint logic:
+        # - intermediate_positions = waypoints to CRUISE THROUGH (no stopping)
+        # - target_position = FINAL destination (where target_velocity applies)
+        #
+        # Strategy: Use look-ahead to decide if we should cruise or stop
+        max_lookahead = min(motion_config.RUCKIG_MAX_LOOKAHEAD_WAYPOINTS, len(self.waypoint_buffer))
+
+        if max_lookahead == 1:
+            # Only 1 waypoint left → this is the final target, stop here
+            self.input_param.target_position = list(self.waypoint_buffer[0].motor_positions)
+            self.input_param.intermediate_positions = []
+            target_vel = motion_config.RUCKIG_FINAL_TARGET_VELOCITY  # Stop
+            target_acc = motion_config.RUCKIG_TARGET_ACCELERATION
+            target_waypoint = self.waypoint_buffer[0]
+        else:
+            # Multiple waypoints → cruise through buffer[0...N-2], target is buffer[N-1]
+            # Set intermediate positions (cruise through these)
+            self.input_param.intermediate_positions = []
+            for i in range(0, max_lookahead - 1):
                 self.input_param.intermediate_positions.append(
                     list(self.waypoint_buffer[i].motor_positions)
                 )
 
-        # Set target velocity: stop only at final waypoint
-        if is_final_waypoint:
-            target_vel = motion_config.RUCKIG_FINAL_TARGET_VELOCITY
-        else:
-            # Let Ruckig decide velocity for smooth fly-through
-            target_vel = 0.0  # Ruckig will optimize velocity for smooth trajectory
+            # Set target position (final point in lookahead)
+            target_idx = max_lookahead - 1
+            self.input_param.target_position = list(self.waypoint_buffer[target_idx].motor_positions)
+            target_waypoint = self.waypoint_buffer[target_idx]
+
+            # Keep moving - don't stop at target since more waypoints may come
+            target_vel = 0.0  # Let Ruckig optimize
+            target_acc = 0.0
 
         # Assign target velocity and acceleration - whole lists!
         self.input_param.target_velocity = [target_vel] * phys_config.NUM_MOTORS
-        self.input_param.target_acceleration = [motion_config.RUCKIG_TARGET_ACCELERATION] * phys_config.NUM_MOTORS
+        self.input_param.target_acceleration = [target_acc] * phys_config.NUM_MOTORS
 
         # Update Ruckig trajectory
         result = self.ruckig.update(self.input_param, self.output_param)
@@ -190,11 +211,18 @@ class MotorTrajectorySmootherNode(Node):
         # Pass output to input for next cycle
         self.output_param.pass_to_input(self.input_param)
 
-        # If we reached the target waypoint, remove it from buffer
+        # If we reached the target, remove processed waypoints from buffer
         if result == Result.Finished:
-            self.waypoint_buffer.pop(0)
+            # We processed: all intermediate waypoints + the target
+            # That's (lookahead - 1) + 1 = lookahead waypoints total
+            waypoints_to_remove = max_lookahead
+            for _ in range(waypoints_to_remove):
+                if self.waypoint_buffer:
+                    self.waypoint_buffer.pop(0)
+
             self.get_logger().info(
-                f'Waypoint reached | Remaining: {len(self.waypoint_buffer)} | Lookahead: {len(self.input_param.intermediate_positions)}'
+                f'Reached target | Removed {waypoints_to_remove} waypoints | '
+                f'Remaining: {len(self.waypoint_buffer)}'
             )
 
     def _publish_visualization_data(self):

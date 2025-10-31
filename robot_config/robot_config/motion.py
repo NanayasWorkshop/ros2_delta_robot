@@ -14,13 +14,13 @@ RUCKIG_DELTA_TIME = 0.01
 MOTOR_MAX_VELOCITY = 0.002
 """Maximum motor velocity (2 mm/s = 0.002 m/s)"""
 
-MOTOR_MAX_ACCELERATION = 0.064
+MOTOR_MAX_ACCELERATION = 0.0012
 """Maximum motor acceleration (64 mm/s² = 0.064 m/s²)"""
 
-MOTOR_MAX_JERK = 0.516
+MOTOR_MAX_JERK = 0.064
 """Maximum motor jerk - rate of change of acceleration (516 mm/s³ = 0.516 m/s³)"""
 
-RUCKIG_SYNCHRONIZATION = 'time'
+RUCKIG_SYNCHRONIZATION = 'None'
 """Synchronization mode: 'time' = all motors reach target simultaneously"""
 
 RUCKIG_CONTROL_INTERFACE = 'position'

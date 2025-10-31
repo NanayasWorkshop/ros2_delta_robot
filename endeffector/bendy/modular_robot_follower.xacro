@@ -1,0 +1,292 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="follower_serial_robot">
+
+  <!-- Robot Dimensional Constants -->
+  <xacro:property name="ground_offset" value="0.080"/>       <!-- 80mm - distance from ground to first joints -->
+  <xacro:property name="H" value="0.022"/>                   <!-- 22mm - equal H distance everywhere (10% larger) -->
+  <xacro:property name="revolute_limit" value="0.2094"/>     <!-- ±12° in radians -->
+  <xacro:property name="disc_radius" value="0.0352"/>        <!-- 35.2mm radius = 70.4mm diameter (20% smaller) -->
+  <xacro:property name="disc_height" value="0.012"/>         <!-- 12mm disc thickness -->
+
+  <!-- Robot Segment Macro -->
+  <xacro:macro name="robot_segment" params="segment_num parent_link is_actuated_x is_actuated_y mimic_segment disc_color">
+    
+    <!-- Revolute Joint X (Roll) -->
+    <joint name="seg${segment_num}_joint_x" type="revolute">
+      <parent link="${parent_link}"/>
+      <child link="seg${segment_num}_x_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="1 0 0"/>
+      <limit lower="-${revolute_limit}" upper="${revolute_limit}" effort="100" velocity="1.0"/>
+      <xacro:if value="${is_actuated_x}">
+        <dynamics damping="0.7" friction="0.0"/>
+      </xacro:if>
+      <xacro:unless value="${is_actuated_x}">
+        <!-- Passive joint - follows control segment -->
+        <mimic joint="seg${mimic_segment}_joint_x" multiplier="1.0" offset="0.0"/>
+        <dynamics damping="0.1" friction="0.0"/>
+      </xacro:unless>
+    </joint>
+
+    <link name="seg${segment_num}_x_link">
+      <!-- No visual - invisible joint -->
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+      </inertial>
+    </link>
+
+    <!-- Revolute Joint Y (Pitch) -->
+    <joint name="seg${segment_num}_joint_y" type="revolute">
+      <parent link="seg${segment_num}_x_link"/>
+      <child link="seg${segment_num}_y_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-${revolute_limit}" upper="${revolute_limit}" effort="100" velocity="1.0"/>
+      <xacro:if value="${is_actuated_y}">
+        <dynamics damping="0.7" friction="0.0"/>
+      </xacro:if>
+      <xacro:unless value="${is_actuated_y}">
+        <!-- Passive joint - follows control segment -->
+        <mimic joint="seg${mimic_segment}_joint_y" multiplier="1.0" offset="0.0"/>
+        <dynamics damping="0.1" friction="0.0"/>
+      </xacro:unless>
+    </joint>
+
+    <link name="seg${segment_num}_y_link">
+      <!-- No visual - invisible joint -->
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+      </inertial>
+    </link>
+
+    <!-- Fixed H distance joint -->
+    <joint name="seg${segment_num}_fixed_h" type="fixed">
+      <parent link="seg${segment_num}_y_link"/>
+      <child link="seg${segment_num}_mid_link"/>
+      <origin xyz="0 0 ${H}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Middle link with disc platform -->
+    <link name="seg${segment_num}_mid_link">
+      <visual>
+        <!-- Disc platform only -->
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${disc_radius}" length="${disc_height}"/>
+        </geometry>
+        <material name="disc_${segment_num}">
+          <color rgba="${disc_color}"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${disc_radius}" length="${disc_height}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.5"/>
+        <inertia ixx="0.002" ixy="0" ixz="0" iyy="0.002" iyz="0" izz="0.003"/>
+      </inertial>
+    </link>
+
+  </xacro:macro>
+
+  <!-- Base Link -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${ground_offset/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.2 ${ground_offset}"/>
+      </geometry>
+      <material name="brown">
+        <color rgba="0.6 0.4 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${ground_offset/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.2 ${ground_offset}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${ground_offset/2}" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <!-- Fixed joint from base to first segment mounting point -->
+  <joint name="base_to_seg1" type="fixed">
+    <parent link="base_link"/>
+    <child link="seg1_mount"/>
+    <origin xyz="0 0 ${ground_offset}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="seg1_mount">
+    <!-- No visual - invisible mounting point -->
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <!-- ===== BOTTOM HALF: 7 segments controlled by seg1 (ORANGE) ===== -->
+
+  <!-- Segment 1: ACTUATED (Bottom Leader) -->
+  <xacro:robot_segment 
+    segment_num="1" 
+    parent_link="seg1_mount"
+    is_actuated_x="true"
+    is_actuated_y="true"
+    mimic_segment="1"
+    disc_color="1.0 0.6 0.2 1.0"/>
+
+  <!-- Segment 2: PASSIVE (Follows seg1) -->
+  <xacro:robot_segment 
+    segment_num="2" 
+    parent_link="seg1_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="1"
+    disc_color="1.0 0.6 0.2 1.0"/>
+
+  <!-- Segment 3: PASSIVE (Follows seg1) -->
+  <xacro:robot_segment 
+    segment_num="3" 
+    parent_link="seg2_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="1"
+    disc_color="1.0 0.6 0.2 1.0"/>
+
+  <!-- Segment 4: PASSIVE (Follows seg1) -->
+  <xacro:robot_segment 
+    segment_num="4" 
+    parent_link="seg3_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="1"
+    disc_color="1.0 0.6 0.2 1.0"/>
+
+  <!-- Segment 5: PASSIVE (Follows seg1) -->
+  <xacro:robot_segment 
+    segment_num="5" 
+    parent_link="seg4_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="1"
+    disc_color="1.0 0.6 0.2 1.0"/>
+
+  <!-- Segment 6: PASSIVE (Follows seg1) -->
+  <xacro:robot_segment 
+    segment_num="6" 
+    parent_link="seg5_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="1"
+    disc_color="1.0 0.6 0.2 1.0"/>
+
+  <!-- Segment 7: PASSIVE (Follows seg1) -->
+  <xacro:robot_segment 
+    segment_num="7" 
+    parent_link="seg6_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="1"
+    disc_color="1.0 0.6 0.2 1.0"/>
+
+  <!-- ===== TOP HALF: 7 segments controlled by seg8 (CYAN) ===== -->
+
+  <!-- Segment 8: ACTUATED (Top Leader) -->
+  <xacro:robot_segment 
+    segment_num="8" 
+    parent_link="seg7_mid_link"
+    is_actuated_x="true"
+    is_actuated_y="true"
+    mimic_segment="8"
+    disc_color="0.2 0.8 0.9 1.0"/>
+
+  <!-- Segment 9: PASSIVE (Follows seg8) -->
+  <xacro:robot_segment 
+    segment_num="9" 
+    parent_link="seg8_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="8"
+    disc_color="0.2 0.8 0.9 1.0"/>
+
+  <!-- Segment 10: PASSIVE (Follows seg8) -->
+  <xacro:robot_segment 
+    segment_num="10" 
+    parent_link="seg9_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="8"
+    disc_color="0.2 0.8 0.9 1.0"/>
+
+  <!-- Segment 11: PASSIVE (Follows seg8) -->
+  <xacro:robot_segment 
+    segment_num="11" 
+    parent_link="seg10_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="8"
+    disc_color="0.2 0.8 0.9 1.0"/>
+
+  <!-- Segment 12: PASSIVE (Follows seg8) -->
+  <xacro:robot_segment 
+    segment_num="12" 
+    parent_link="seg11_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="8"
+    disc_color="0.2 0.8 0.9 1.0"/>
+
+  <!-- Segment 13: PASSIVE (Follows seg8) -->
+  <xacro:robot_segment 
+    segment_num="13" 
+    parent_link="seg12_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="8"
+    disc_color="0.2 0.8 0.9 1.0"/>
+
+  <!-- Segment 14: PASSIVE (Follows seg8) -->
+  <xacro:robot_segment 
+    segment_num="14" 
+    parent_link="seg13_mid_link"
+    is_actuated_x="false"
+    is_actuated_y="false"
+    mimic_segment="8"
+    disc_color="0.2 0.8 0.9 1.0"/>
+
+  <!-- End Effector -->
+  <joint name="ee_joint" type="fixed">
+    <parent link="seg14_mid_link"/>
+    <child link="end_effector"/>
+    <origin xyz="0 0 ${disc_height/2}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="end_effector">
+    <visual>
+      <origin xyz="0 0 0.02" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.025"/>
+      </geometry>
+      <material name="green">
+        <color rgba="0.2 0.9 0.2 1.0"/>
+      </material>
+    </visual>
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+</robot>

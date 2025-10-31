@@ -14,7 +14,7 @@ import math
 # =============================================================================
 
 BASE_HEIGHT = 0.0115
-"""Height from base to joint1 (11.5mm)"""
+"""Height from base to joint1 (11.5mm) 16.5mm with FT Sensor"""
 
 SEGMENT_OFFSET = 0.0615
 """Offset from joint2 to joint3, and middle to joint5 (61.5mm)"""

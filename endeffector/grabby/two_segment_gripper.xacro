@@ -1,0 +1,212 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="two_segment_gripper">
+
+  <!-- Robot Dimensional Constants -->
+  <xacro:property name="ground_offset" value="0.080"/>       <!-- 80mm - distance from ground to gripper base -->
+  <xacro:property name="H" value="0.022"/>                   <!-- 22mm - equal H distance everywhere -->
+  <xacro:property name="segment1_limit" value="0.2094"/>     <!-- ±12° for segment 1 -->
+  <xacro:property name="segment2_limit" value="0.2094"/>     <!-- ±12° for segment 2 -->
+  <xacro:property name="disc_height" value="0.012"/>         <!-- 12mm disc thickness -->
+  
+  <!-- Gripper Constants -->
+  <xacro:property name="finger_base_radius" value="0.015"/>  <!-- 15mm radius = 30mm diameter at base -->
+  <xacro:property name="finger_mid_radius" value="0.01125"/> <!-- 11.25mm radius at middle -->
+  <xacro:property name="finger_tip_radius" value="0.0075"/>  <!-- 7.5mm radius = 15mm diameter at tip -->
+  <xacro:property name="finger_offset" value="0.022"/>       <!-- 22mm from center -->
+
+  <!-- Finger Segment Macro -->
+  <xacro:macro name="finger_segment" params="finger_num segment_num parent_link is_actuated mimic_joint disc_radius_val color">
+    
+    <!-- Revolute Joint -->
+    <joint name="finger${finger_num}_seg${segment_num}_joint" type="revolute">
+      <parent link="${parent_link}"/>
+      <child link="finger${finger_num}_seg${segment_num}_link"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <!-- Segments 1-5 (level 1) use -1° to +12° -->
+      <xacro:if value="${segment_num &lt;= 5}">
+        <limit lower="-0.0175" upper="${segment1_limit}" effort="50" velocity="1.0"/>
+      </xacro:if>
+      <!-- Segments 6-10 (level 2) use -6° to +12° -->
+      <xacro:if value="${segment_num &gt; 5}">
+        <limit lower="-0.1047" upper="${segment2_limit}" effort="50" velocity="1.0"/>
+      </xacro:if>
+      <xacro:if value="${is_actuated}">
+        <dynamics damping="0.5" friction="0.0"/>
+      </xacro:if>
+      <xacro:unless value="${is_actuated}">
+        <mimic joint="${mimic_joint}" multiplier="1.0" offset="0.0"/>
+        <dynamics damping="0.1" friction="0.0"/>
+      </xacro:unless>
+    </joint>
+
+    <link name="finger${finger_num}_seg${segment_num}_link">
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.01"/>
+        <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+      </inertial>
+    </link>
+
+    <!-- Fixed H distance to disc -->
+    <joint name="finger${finger_num}_seg${segment_num}_fixed" type="fixed">
+      <parent link="finger${finger_num}_seg${segment_num}_link"/>
+      <child link="finger${finger_num}_seg${segment_num}_disc"/>
+      <origin xyz="0 0 ${H}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Disc -->
+    <link name="finger${finger_num}_seg${segment_num}_disc">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${disc_radius_val}" length="${disc_height}"/>
+        </geometry>
+        <material name="finger_seg${segment_num}_mat">
+          <color rgba="${color}"/>
+        </material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <cylinder radius="${disc_radius_val}" length="${disc_height}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="0.1"/>
+        <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+      </inertial>
+    </link>
+
+  </xacro:macro>
+
+  <!-- Base Link -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${ground_offset/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.2 ${ground_offset}"/>
+      </geometry>
+      <material name="brown">
+        <color rgba="0.6 0.4 0.2 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${ground_offset/2}" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.2 0.2 ${ground_offset}"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${ground_offset/2}" rpy="0 0 0"/>
+      <mass value="2.0"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <!-- Gripper Base -->
+  <joint name="base_to_gripper" type="fixed">
+    <parent link="base_link"/>
+    <child link="gripper_base"/>
+    <origin xyz="0 0 ${ground_offset}" rpy="0 0 0"/>
+  </joint>
+
+  <link name="gripper_base">
+    <visual>
+      <origin xyz="0 0 0.005" rpy="0 0 0"/>
+      <geometry>
+        <cylinder radius="0.04" length="0.01"/>
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <inertial>
+      <mass value="0.2"/>
+      <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+    </inertial>
+  </link>
+
+  <!-- ===== FINGER 1 (at 0°) ===== -->
+  <joint name="finger1_mount" type="fixed">
+    <parent link="gripper_base"/>
+    <child link="finger1_base"/>
+    <origin xyz="${finger_offset} 0 0.01" rpy="0 0 0"/>
+  </joint>
+  <link name="finger1_base">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <!-- Finger 1: Level 1 - 5 discs (all controlled by seg1_joint) GREEN -->
+  <xacro:finger_segment finger_num="1" segment_num="1" parent_link="finger1_base" is_actuated="true" mimic_joint="" disc_radius_val="${finger_base_radius}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="2" parent_link="finger1_seg1_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 1*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="3" parent_link="finger1_seg2_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 2*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="4" parent_link="finger1_seg3_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 3*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="5" parent_link="finger1_seg4_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_mid_radius}" color="0.2 0.9 0.5 1.0"/>
+  
+  <!-- Finger 1: Level 2 - 5 discs (all controlled by seg6_joint) CYAN -->
+  <xacro:finger_segment finger_num="1" segment_num="6" parent_link="finger1_seg5_disc" is_actuated="true" mimic_joint="" disc_radius_val="${finger_mid_radius}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="7" parent_link="finger1_seg6_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 1*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="8" parent_link="finger1_seg7_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 2*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="9" parent_link="finger1_seg8_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 3*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="1" segment_num="10" parent_link="finger1_seg9_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_tip_radius}" color="0.2 0.8 0.9 1.0"/>
+
+  <!-- ===== FINGER 2 (at 120°) ===== -->
+  <joint name="finger2_mount" type="fixed">
+    <parent link="gripper_base"/>
+    <child link="finger2_base"/>
+    <origin xyz="${finger_offset*cos(2.0944)} ${finger_offset*sin(2.0944)} 0.01" rpy="0 0 2.0944"/>
+  </joint>
+  <link name="finger2_base">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <!-- Finger 2: Level 1 - 5 discs (mimic finger1 level 1) GREEN -->
+  <xacro:finger_segment finger_num="2" segment_num="1" parent_link="finger2_base" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="2" parent_link="finger2_seg1_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 1*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="3" parent_link="finger2_seg2_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 2*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="4" parent_link="finger2_seg3_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 3*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="5" parent_link="finger2_seg4_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_mid_radius}" color="0.2 0.9 0.5 1.0"/>
+  
+  <!-- Finger 2: Level 2 - 5 discs (mimic finger1 level 2) CYAN -->
+  <xacro:finger_segment finger_num="2" segment_num="6" parent_link="finger2_seg5_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="7" parent_link="finger2_seg6_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 1*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="8" parent_link="finger2_seg7_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 2*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="9" parent_link="finger2_seg8_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 3*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="2" segment_num="10" parent_link="finger2_seg9_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_tip_radius}" color="0.2 0.8 0.9 1.0"/>
+
+  <!-- ===== FINGER 3 (at 240°) ===== -->
+  <joint name="finger3_mount" type="fixed">
+    <parent link="gripper_base"/>
+    <child link="finger3_base"/>
+    <origin xyz="${finger_offset*cos(4.1888)} ${finger_offset*sin(4.1888)} 0.01" rpy="0 0 4.1888"/>
+  </joint>
+  <link name="finger3_base">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+    </inertial>
+  </link>
+
+  <!-- Finger 3: Level 1 - 5 discs (mimic finger1 level 1) GREEN -->
+  <xacro:finger_segment finger_num="3" segment_num="1" parent_link="finger3_base" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="2" parent_link="finger3_seg1_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 1*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="3" parent_link="finger3_seg2_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 2*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="4" parent_link="finger3_seg3_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_base_radius - 3*(finger_base_radius - finger_mid_radius)/4}" color="0.2 0.9 0.5 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="5" parent_link="finger3_seg4_disc" is_actuated="false" mimic_joint="finger1_seg1_joint" disc_radius_val="${finger_mid_radius}" color="0.2 0.9 0.5 1.0"/>
+  
+  <!-- Finger 3: Level 2 - 5 discs (mimic finger1 level 2) CYAN -->
+  <xacro:finger_segment finger_num="3" segment_num="6" parent_link="finger3_seg5_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="7" parent_link="finger3_seg6_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 1*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="8" parent_link="finger3_seg7_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 2*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="9" parent_link="finger3_seg8_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_mid_radius - 3*(finger_mid_radius - finger_tip_radius)/4}" color="0.2 0.8 0.9 1.0"/>
+  <xacro:finger_segment finger_num="3" segment_num="10" parent_link="finger3_seg9_disc" is_actuated="false" mimic_joint="finger1_seg6_joint" disc_radius_val="${finger_tip_radius}" color="0.2 0.8 0.9 1.0"/>
+
+</robot>
