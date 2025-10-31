@@ -33,7 +33,7 @@ TRAJECTORY_TRACKED_FRAMES = ['target', 'direction']
 TRAJECTORY_REFERENCE_FRAME = 'world'
 """Reference frame for trajectory recording"""
 
-TRAJECTORY_SAMPLE_RATE = 5.0
+TRAJECTORY_SAMPLE_RATE = 30.0
 """Trajectory sampling rate in Hz"""
 
 TRAJECTORY_POSITION_TOLERANCE = 1e-6
